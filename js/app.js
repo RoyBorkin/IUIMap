@@ -481,6 +481,11 @@ POINTS.forEach((p) => {
   if (!obj) return;
   obj.position.copy(W(p.e, p.n, yAt(p.e, p.n)));
   if (p.heading != null) obj.rotation.y = Math.atan2(Math.sin(rad(p.heading)), -Math.cos(rad(p.heading)));
+  // tables in a row each stand on their own patch of seabed
+  if (p.parts && obj.children.length === p.parts.length) {
+    const y0 = yAt(p.e, p.n);
+    obj.children.forEach((c, k) => (c.position.y = yAt(p.parts[k].e, p.parts[k].n) - y0));
+  }
   scene.add(obj);
 });
 {
@@ -1413,4 +1418,4 @@ const hashId = decodeURIComponent(location.hash.slice(1));
 if (byId[hashId]) setTimeout(() => select(hashId), 400);
 
 // small debugging handle
-window.__iui = { POINTS, select, resetView, camera, controls, fit, seabed };
+window.__iui = { POINTS, select, resetView, camera, controls, fit, seabed, scene, yAt };

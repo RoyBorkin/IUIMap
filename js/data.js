@@ -46,7 +46,7 @@ export const POINTS = [
     id: 'empty', name: 'שולחן ריק',
     en: {name: "Empty table", terrain: "Rubble and gravel", material: "Metal"},
     derive: { from: 'flowering', bearing: 60, dist: 6 },
-    depth: [9, 11], dims: [1.5, 1.5, 1.5], shape: 'box',
+    depth: [5.6], dims: [1.5, 1.5, 1.5], shape: 'box',
     terrain: 'דרדרת וחצץ', material: 'מתכת',
     photos: photoSet('empty', 3), model: 'empty',
   },
