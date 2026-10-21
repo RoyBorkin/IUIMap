@@ -20,6 +20,10 @@
       try { t = localStorage.getItem('iui-theme'); } catch (e) {}
       if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       document.documentElement.dataset.theme = t;
+      // language before paint
+      var l = null;
+      try { l = new URLSearchParams(location.search).get('lang') || localStorage.getItem('iui-lang'); } catch (e) {}
+      if (l === 'en') { document.documentElement.lang = 'en'; document.documentElement.dir = 'ltr'; }
     })();
   </script>
   <script type="importmap">
@@ -33,59 +37,67 @@
 </head>
 <body>
   <div class="app">
-    <main class="stage" id="stage" aria-label="מפה תלת־ממדית של הקרקעית">
+    <main class="stage" id="stage" aria-label="מפה תלת־ממדית של הקרקעית" data-i18n-aria="stageLabel">
       <canvas id="scene"></canvas>
       <div class="labels" id="labels"></div>
     </main>
 
     <header class="cartouche">
-      <h1><span class="c-title">מפת הקרקעית</span><span class="c-place">חוף המכון הבין־אוניברסיטאי, אילת</span></h1>
+      <h1><span class="c-title" data-i18n="title">מפת הקרקעית</span><span class="c-place" data-i18n="place">חוף המכון הבין־אוניברסיטאי, אילת</span></h1>
       <p class="c-meta" id="meta"></p>
     </header>
 
-    <nav class="toolbar" aria-label="תצוגות">
-      <button class="tb" type="button" data-deck="divers" aria-label="צוות הצלילה">
+    <nav class="toolbar" aria-label="תצוגות" data-i18n-aria="toolbar">
+      <button class="tb" type="button" data-deck="divers" aria-label="צוות הצלילה" data-i18n-aria="divers">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/><path d="M3.5 5.5l17 13"/></svg>
-        <span>צוות הצלילה</span>
+        <span data-i18n="divers">צוות הצלילה</span>
       </button>
-      <button class="tb" type="button" data-deck="snorkel" aria-label="צוות המשקיפים">
+      <button class="tb" type="button" data-deck="snorkel" aria-label="צוות המשקיפים" data-i18n-aria="snorkel">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3v11a5 5 0 0 1-10 0v-1"/><path d="M13 3h4"/><circle cx="5" cy="11" r="1.6"/></svg>
-        <span>צוות המשקיפים</span>
+        <span data-i18n="snorkel">צוות המשקיפים</span>
       </button>
-      <button class="tb" type="button" data-deck="plan" aria-label="תכנון המשימה">
+      <button class="tb" type="button" data-deck="plan" aria-label="תכנון המשימה" data-i18n-aria="plan">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.5" r="1.8"/><path d="M11 6.2L5.5 20.5M13 6.2l5.5 14.3M7.6 15h8.8"/></svg>
-        <span>תכנון המשימה</span>
+        <span data-i18n="plan">תכנון המשימה</span>
       </button>
-      <button class="tb tb-map" type="button" id="mapToggle" aria-label="מפת לוויין" aria-expanded="false" aria-controls="inset">
+      <button class="tb tb-map" type="button" id="mapToggle" aria-label="מפת לוויין" data-i18n-aria="map" aria-expanded="false" aria-controls="inset">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>
-        <span>מפת לוויין</span>
+        <span data-i18n="map">מפת לוויין</span>
       </button>
-      <button class="tb tb-sim" type="button" id="simToggle" role="switch" aria-checked="false" aria-label="הדמיית קרקעית">
+      <button class="tb tb-sim" type="button" id="simToggle" role="switch" aria-checked="false" aria-label="הדמיית קרקעית" data-i18n-aria="sim">
         <span class="sw" aria-hidden="true"><span class="sw-dot"></span></span>
-        <span>הדמיית קרקעית</span>
+        <span data-i18n="sim">הדמיית קרקעית</span>
       </button>
       <button class="tb tb-theme" type="button" id="themeToggle" aria-label="מעבר לתצוגה כהה">
         <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>
         <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
         <span class="tb-theme-label">תצוגה כהה</span>
       </button>
+      <button class="tb tb-lang" type="button" id="langToggle" lang="en" aria-label="Switch to English" data-i18n-aria="langAria">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.6 5.2 3.6 8.5s-1 6.1-3.6 8.5c-2.6-2.4-3.6-5.2-3.6-8.5s1-6.1 3.6-8.5z"/></svg>
+        <span data-i18n="langBtn">English</span>
+      </button>
+      <button class="tb tb-qr" type="button" id="qrBtn" aria-label="קוד QR לאתר" data-i18n-aria="qrAria">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M14 14h2v2h-2zM18 14h2M14 18h2v2M18 18h2v2h-2"/></svg>
+        <span data-i18n="qr">QR</span>
+      </button>
     </nav>
 
     <div class="dock">
-    <section class="depths" aria-label="חתכי עומק">
-      <p class="depths-title">חתכי עומק</p>
+    <section class="depths" aria-label="חתכי עומק" data-i18n-aria="depthsGroup">
+      <p class="depths-title" data-i18n="depths">חתכי עומק</p>
       <div class="depth-chips" id="depthChips"></div>
-      <ol class="legend" aria-label="גווני עומק">
+      <ol class="legend" aria-label="גווני עומק" data-i18n-aria="legendGroup">
         <li><i style="background:var(--t1)"></i>0–3</li>
         <li><i style="background:var(--t2)"></i>3–6</li>
         <li><i style="background:var(--t3)"></i>6–9</li>
-        <li><i style="background:var(--t4)"></i>9+ מ׳</li>
+        <li><i style="background:var(--t4)"></i><span data-i18n="legendDeep">9+ מ׳</span></li>
       </ol>
     </section>
 
     <div class="nav-widgets">
       <div class="scalebar" aria-hidden="true"><span class="scalebar-bar" id="scaleBar"></span><span id="scaleText">20 מ׳</span></div>
-      <button class="compass" id="compass" type="button" aria-label="חזרה למבט על, צפון למעלה" title="מבט על">
+      <button class="compass" id="compass" type="button" aria-label="חזרה למבט על, צפון למעלה" data-i18n-aria="compass" title="מבט על" data-i18n-title="compassTitle">
         <svg viewBox="0 0 64 64" aria-hidden="true">
           <g id="compassRose">
             <circle cx="32" cy="32" r="27" class="cr-ring"/>
@@ -100,15 +112,15 @@
     </div>
     </div>
 
-    <aside class="inset" id="inset" aria-label="מפת לוויין לניווט מהיר">
+    <aside class="inset" id="inset" aria-label="מפת לוויין לניווט מהיר" data-i18n-aria="insetAria">
       <div class="inset-head">
-        <p>מפת לוויין</p>
-        <button type="button" class="icon-btn" id="insetClose" aria-label="סגירת מפת הלוויין">
+        <p data-i18n="insetTitle">מפת לוויין</p>
+        <button type="button" class="icon-btn" id="insetClose" aria-label="סגירת מפת הלוויין" data-i18n-aria="insetClose">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </div>
       <div class="inset-map" id="insetMap" dir="ltr"></div>
-      <p class="inset-hint">לחיצה על X מעבירה את התלת־ממד לנקודה</p>
+      <p class="inset-hint" data-i18n="insetHint">לחיצה על X מעבירה את התלת־ממד לנקודה</p>
     </aside>
 
     <aside class="panel" id="panel" aria-labelledby="pTitle" hidden>
@@ -121,26 +133,37 @@
     <div class="deck-frame">
       <header class="deck-head">
         <p class="deck-name" id="deckName"></p>
-        <button type="button" class="icon-btn" id="deckClose" aria-label="סגירת השקופיות">
+        <button type="button" class="icon-btn" id="deckClose" aria-label="סגירת השקופיות" data-i18n-aria="deckClose">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </header>
       <div class="deck-body" id="deckBody"></div>
       <footer class="deck-foot">
-        <button type="button" class="btn" id="deckPrev">הקודמת</button>
+        <button type="button" class="btn" id="deckPrev" data-i18n="deckPrev">הקודמת</button>
         <p class="deck-count" id="deckCount" aria-live="polite"></p>
-        <button type="button" class="btn" id="deckNext">הבאה</button>
+        <button type="button" class="btn" id="deckNext" data-i18n="deckNext">הבאה</button>
       </footer>
     </div>
   </dialog>
 
-  <dialog class="lightbox" id="lightbox" aria-label="תמונה מוגדלת">
-    <button type="button" class="icon-btn lb-close" id="lbClose" aria-label="סגירה">
+  <dialog class="lightbox" id="lightbox" aria-label="תמונה מוגדלת" data-i18n-aria="lbAria">
+    <button type="button" class="icon-btn lb-close" id="lbClose" aria-label="סגירה" data-i18n-aria="lbClose">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
     <figure><img id="lbImg" alt=""><figcaption id="lbCap"></figcaption></figure>
-    <button type="button" class="icon-btn lb-nav lb-prev" id="lbPrev" aria-label="התמונה הקודמת"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
-    <button type="button" class="icon-btn lb-nav lb-next" id="lbNext" aria-label="התמונה הבאה"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button type="button" class="icon-btn lb-nav lb-prev" id="lbPrev" aria-label="התמונה הקודמת" data-i18n-aria="lbPrev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button type="button" class="icon-btn lb-nav lb-next" id="lbNext" aria-label="התמונה הבאה" data-i18n-aria="lbNext"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+  </dialog>
+
+  <dialog class="qr" id="qrDialog" aria-labelledby="qrTitle">
+    <button type="button" class="icon-btn qr-close" id="qrClose" aria-label="סגירה" data-i18n-aria="qrClose">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <h2 id="qrTitle" data-i18n="qrTitle">פתיחת האתר בטלפון</h2>
+    <p data-i18n="qrBody">סרקו את הקוד במצלמה של הטלפון כדי לפתוח את המפה.</p>
+    <div class="qr-code" id="qrCode"></div>
+    <p class="qr-url" dir="ltr">royborkin.github.io/IUIMap</p>
+    <button type="button" class="btn" id="qrCopy">העתקת הקישור</button>
   </dialog>
 
   <noscript><p class="noscript">כדי לראות את המפה צריך להפעיל JavaScript.</p></noscript>

@@ -27,6 +27,7 @@ export const LIVE_CAMERA_YOUTUBE_ID = '7t21fq-hh-4';
 export const POINTS = [
   {
     id: 'nursery', name: 'משתלה',
+    en: {name: "Coral nursery", terrain: "Small stones and rubble"},
     lat: [29, 30.137], lon: [34, 55.103],
     depth: [7, 10], dims: [7.3, 6, 1.4], shape: 'box',
     terrain: 'אבנים קטנות ודרדרת', material: '',
@@ -34,6 +35,7 @@ export const POINTS = [
   },
   {
     id: 'tables3', name: '3 שולחנות',
+    en: {name: "3 tables", terrain: "Gravel", material: "Metal", dimsText: "Three grid tables, each 0.8 m wide, 1.7 m long and 1.2 m high, 5.5 m apart"},
     lat: [29, 30.126], lon: [34, 55.099],
     depth: [8, 10], dims: [0.8, 1.7, 1.2], shape: 'box', spacing: 5.5,
     dimsText: 'שלושה שולחנות רשת, כל אחד ברוחב 0.8, אורך 1.7 וגובה 1.2 מ׳, במרחק 5.5 מ׳ זה מזה',
@@ -42,6 +44,7 @@ export const POINTS = [
   },
   {
     id: 'empty', name: 'שולחן ריק',
+    en: {name: "Empty table", terrain: "Rubble and gravel", material: "Metal"},
     derive: { from: 'flowering', bearing: 60, dist: 6 },
     depth: [9, 11], dims: [1.5, 1.5, 1.5], shape: 'box',
     terrain: 'דרדרת וחצץ', material: 'מתכת',
@@ -49,6 +52,7 @@ export const POINTS = [
   },
   {
     id: 'flowering', name: 'שולחן פורח',
+    en: {name: "Flowering table", terrain: "Sand", material: "Metal, covered in coral"},
     lat: [29, 30.113], lon: [34, 55.080],
     depth: [5.6], dims: [0.8, 2.4, 0.6], shape: 'box',
     terrain: 'חול', material: 'מתכת, מכוסה אלמוגים',
@@ -56,6 +60,7 @@ export const POINTS = [
   },
   {
     id: 'current', name: 'בטונדה מד־זרם',
+    en: {name: "Current-meter block", terrain: "Sand", material: "Concrete"},
     lat: [29, 30.121], lon: [34, 55.083],
     depth: [4.2], dims: [1, 1.1, 2.8], shape: 'box',
     terrain: 'חול', material: 'בטון',
@@ -63,6 +68,7 @@ export const POINTS = [
   },
   {
     id: 'pair', name: 'זוג בטונדות',
+    en: {name: "Pair of blocks", terrain: "Rocks", material: "Concrete"},
     lat: [29, 30.114], lon: [34, 55.079],
     depth: [5], dims: [0.6, 2.3, 1], shape: 'box',
     terrain: 'סלעים', material: 'בטון',
@@ -70,6 +76,7 @@ export const POINTS = [
   },
   {
     id: 'pier', name: 'מזח',
+    en: {name: "Pier", terrain: "Rocks", material: "Steel and concrete", dimsText: "9 m wide", note: "The pier model is based on the satellite photo and the photos above and below the water: steel lattice piles, a pier head with fender tyres and a railing, and a weather mast."},
     lat: [29, 30.110], lon: [34, 55.063],
     depth: [4], dims: [9], dimsText: 'רוחב 9 מ׳', shape: 'pier',
     terrain: 'סלעים', material: 'פלדה ובטון',
@@ -78,6 +85,7 @@ export const POINTS = [
   },
   {
     id: 'habitat', name: 'הביטט',
+    en: {name: "Habitat", terrain: "Reef, rubble"},
     lat: [29, 30.069], lon: [34, 55.039],
     depth: [10, 11], dims: [7.8, 5.2, 2], shape: 'box',
     terrain: 'שונית, דרדרת', material: '',
@@ -85,6 +93,7 @@ export const POINTS = [
   },
   {
     id: 'habitat2', name: 'הביטט 2',
+    en: {name: "Habitat 2", note: "An extra point about 15 m from the Habitat, towards deeper water. Depth and size not measured yet."},
     derive: { from: 'habitat', bearing: 90, dist: 15 },
     depth: [], dims: [], shape: 'none',
     terrain: '', material: '',
@@ -93,6 +102,7 @@ export const POINTS = [
   },
   {
     id: 'pyramid', name: 'פירמידה',
+    en: {name: "Pyramid", terrain: "Reef, rubble", dimsText: "Triangular base with 1.6 m sides, 1 m high"},
     lat: [29, 30.057], lon: [34, 55.025],
     depth: [8], dims: [1.6, 1.6, 1], dimsText: 'בסיס משולש בצלע 1.6, גובה 1', shape: 'pyramid',
     terrain: 'שונית, דרדרת', material: '',
@@ -100,6 +110,7 @@ export const POINTS = [
   },
   {
     id: 'deep', name: 'שולחן עומק',
+    en: {name: "Deep table", terrain: "Rubble"},
     derive: { from: 'empty', bearing: 130, dist: 10 },
     depth: [10, 12], dims: [3, 1.5, 1], shape: 'box',
     terrain: 'דרדרת', material: '',
@@ -107,6 +118,7 @@ export const POINTS = [
   },
   {
     id: 'shahar', name: 'השולחן של שחר',
+    en: {name: "Shahar's table", terrain: "Rubble"},
     derive: { from: 'flowering', bearing: 130, dist: 13 },
     depth: [10, 12], dims: [6, 1, 1.5], shape: 'box',
     terrain: 'דרדרת', material: '',
@@ -114,6 +126,7 @@ export const POINTS = [
   },
   {
     id: 'cylinder', name: 'גליל ליד המזח',
+    en: {name: "Cylinder by the pier", terrain: "Rocks", note: "30 m to the right of the pier end."},
     derive: { from: 'pier', bearing: 180, dist: 30, rough: true },
     depth: [4], dims: [0.5, 1, 0.5], shape: 'cylinder',
     terrain: 'סלעים', material: '',
@@ -122,6 +135,7 @@ export const POINTS = [
   },
   {
     id: 'leftblock', name: 'בטונדה משמאל למזח',
+    en: {name: "Block left of the pier", terrain: "Rocks and sand", material: "Concrete", note: "About 10 m south of the pier point."},
     derive: { from: 'pier', bearing: 180, dist: 10 },
     depth: [3], dims: [1, 1, 1], shape: 'box',
     terrain: 'סלעים וחול', material: 'בטון',
@@ -130,6 +144,7 @@ export const POINTS = [
   },
   {
     id: 'camera', name: 'מצלמה',
+    en: {name: "Camera", terrain: "Reef", note: "An underwater camera that streams live to the public."},
     lat: [29, 30.077], lon: [34, 55.027],
     depth: [4], dims: [], shape: 'camera',
     terrain: 'שונית', material: '',
@@ -162,74 +177,239 @@ export const BRANCHES = [
   { from: 'camera', to: 'pier', bearing: 40, dist: '' },
 ];
 
+
 // ─────────────────────────────────────────────────────────────
-//  שקופיות. החליפו את [שם] בשמות חברי הצוות.
-//  type: 'text' | 'people' | 'route' | 'profile' | 'bands' | 'facts'
+//  שקופיות, בעברית ובאנגלית. Slides, in Hebrew and English.
+//  type: 'text' (lead, bullets, list, stats, image) | 'groups' |
+//        'route' | 'profile' | 'bands' | 'image'
 // ─────────────────────────────────────────────────────────────
+const IMG = (n) => `assets/photos/${n}.jpg`;
+
 export const DECKS = {
-  divers: {
-    title: 'צוות הצלילה',
-    slides: [
-      {
-        type: 'facts',
-        image: 'assets/photos/divers-1.jpg',
-        title: 'מה עשה צוות הצלילה',
-        body: 'צוות הצלילה עבר מתחת למים לאורך המסלול, מהמשתלה ועד הפירמידה. בכל נקודה רשמנו את העומק, מדדנו את העצם ואת סוג הקרקעית, ולקחנו אזימוט ומרחק אל הנקודה הבאה. מהרישומים האלה נבנתה המפה.',
-      },
-      {
-        type: 'people',
-        title: 'חברי הצוות',
-        people: [
-          { name: '[שם]', role: 'ניווט ומצפן' },
-          { name: '[שם]', role: 'מדידת עצמים' },
-          { name: '[שם]', role: 'צילום' },
-          { name: '[שם]', role: 'רישום על לוח' },
-        ],
-      },
-      {
-        type: 'text',
-        title: 'איך מדדנו',
-        list: [
-          ['עומק', 'לפי מחשב הצלילה, בתחתית העצם.'],
-          ['מידות', 'סרט מדידה: רוחב, אורך וגובה.'],
-          ['כיוון', 'מצפן, אזימוט מכל נקודה לבאה אחריה.'],
-          ['מרחק', 'סרט מדידה בין הנקודות.'],
-          ['קרקעית', 'תיאור חזותי: חול, חצץ, דרדרת, סלעים או שונית.'],
-        ],
-      },
-    ],
+  he: {
+    plan: {
+      title: 'תכנון המשימה',
+      slides: [
+        {
+          type: 'text', title: 'מיפוי תת־ימי מול המכון',
+          lead: 'מיפינו את השטח מול המכון הבין־אוניברסיטאי למדעי הים באילת, מצפון לדרום. המיפוי כלל שמונה נקודות ציון ותיאור של התכסית והתבליט.',
+          bullets: ['בכל נקודה מדדנו אורך, רוחב וגובה, אזימוט ואת המרחק בין האובייקטים.'],
+          image: IMG('satellite-1'), caption: 'חוף המכון והמזח מלמעלה. מקור: GovMap.',
+        },
+        {
+          type: 'groups', title: 'חלוקת התפקידים',
+          lead: 'היינו ארבעה בצוות והתחלקנו לשני זוגות.',
+          groups: [
+            { title: 'צוות הצלילה', sub: 'צלילת מיכלים', members: ['קורל', 'עמית'] },
+            { title: 'צוות השנורקל', sub: 'שנורקל וצלילה חופשית', members: ['שירה', 'רועי'] },
+          ],
+        },
+        {
+          type: 'text', title: 'איך ביצענו את המדידות',
+          list: [
+            ['עומק', 'נמדד במחשב צלילה.'],
+            ['ממדים', 'נמדדו ברולטקה.'],
+            ['אזימוט ומרחק', 'שני הצוותים מדדו בין נקודות עוקבות, כדי להשוות בין התוצאות ולבדוק את המדידות זה של זה.'],
+            ['מרחקים', 'ברולטקה כשהתאפשר. במקומות אחרים הערכנו לפי ספירת מכות סנפיר.'],
+            ['רישום', 'בטבלאות שעל הסלייטים. את סוג הקרקעית, הכיסוי שלה והמבנים תיארנו במהלך המיפוי.'],
+          ],
+          image: IMG('nursery-15'), caption: 'מדידה ברולטקה מעל המשתלה.',
+        },
+        {
+          type: 'text', title: 'מה בוצע בפועל והמגבלות',
+          bullets: [
+            'המיפוי התבצע לפי חלוקת התפקידים שתכננו.',
+            'בגלל פרופיל הצלילה, צוות המיכלים מיפה רק את השטח שמצפון לרציף (נקודות 1–6). צוות השנורקלים השלים את המדידות החסרות והמשיך משם.',
+            'סוללת המצלמה התרוקנה בנקודה 6, ולכן התיעוד המצולם מהנקודה הזאת והלאה מוגבל.',
+            'העומק המרבי שאושר היה 10 מטרים. בפועל נמדד עומק מרבי של 10.4 מטרים, חריגה של 0.4 מטר מהמגבלה.',
+          ],
+          stats: [['50', 'דקות, משך צלילת המיכלים'], ['6', 'נקודות מצפון לרציף, בצלילת המיכלים'], ['10.4', 'מטר, העומק המרבי שנמדד']],
+        },
+        { type: 'route', title: 'המסלול' },
+        { type: 'profile', title: 'חתך עומק לאורך המסלול' },
+        { type: 'bands', title: 'הנקודות לפי עומק' },
+      ],
+    },
+    divers: {
+      title: 'צוות הצלילה',
+      slides: [
+        {
+          type: 'text', title: 'צוות צוללי המיכלים',
+          lead: 'קורל ועמית, בצלילת מיכלים.',
+          bullets: [
+            'מדדנו עומקים וממדים של האובייקטים.',
+            'מדדנו את האזימוט לנקודה הבאה, ומדדנו או הערכנו את המרחק בין הנקודות.',
+            'תיארנו את הקרקעית בכל נקודה.',
+          ],
+          image: IMG('divers-1'),
+        },
+        {
+          type: 'text', title: 'הציוד',
+          list: [
+            ['ציוד צלילה מלא', 'לצלילת מיכלים.'],
+            ['מצפן', 'למדידת אזימוט לנקודה הבאה.'],
+            ['מחשב צלילה', 'למדידת עומק.'],
+            ['רולטקה', 'לממדים ולמרחקים.'],
+            ['סלייט', 'עם טבלה שהכנו מראש.'],
+          ],
+          image: IMG('nursery-16'), caption: 'מדידת המשתלה ברולטקה.',
+        },
+        {
+          type: 'text', title: 'מה מיפינו',
+          lead: 'בגלל פרופיל הצלילה מיפינו את השטח שמצפון לרציף, נקודות 1–6, מהמשתלה ועד המזח.',
+          stats: [['50', 'דקות צלילה'], ['6', 'נקודות'], ['10.4', 'מטר, העומק המרבי']],
+          image: IMG('tables3-5'), caption: 'מדידה ליד אחד משלושת השולחנות.',
+        },
+      ],
+    },
+    snorkel: {
+      title: 'צוות המשקיפים',
+      slides: [
+        {
+          type: 'text', title: 'צוות השנורקלים',
+          lead: 'שירה ורועי, בשנורקל ובצלילה חופשית. פעלו מעל צוות הצלילה עד סיום הצלילה.',
+          bullets: [
+            'השלימו מדידות ותיעוד שצוות המיכלים לא הספיק, כולל עומקים וממדי אובייקטים לפי הצורך.',
+            'מדדו אזימוטים ומרחקים ותיארו את הקרקעית.',
+            'צילמו את האובייקטים מלמעלה ומהצד.',
+          ],
+          image: IMG('flowering-5'), caption: 'השולחן הפורח, צילום מלמעלה.',
+        },
+        {
+          type: 'text', title: 'הציוד',
+          list: [
+            ['שנורקל ומסכה', ''], ['מצפן', ''], ['מצלמה', ''], ['רולטקה ומשקולת', ''], ['סלייט', 'עם טבלה מוכנה.'],
+          ],
+          image: IMG('pier-5'), caption: 'המזח מפני המים.',
+        },
+        {
+          type: 'text', title: 'המשך המיפוי מדרום למזח',
+          lead: 'אחרי שצוות המיכלים סיים במזח את 6 הנקודות הצפוניות, צוות השנורקל המשיך לבד לשתי הנקודות שמדרום למזח, והוסיף לאורך המסלול נקודות שתוכננו מראש להשלמה בשלב הזה.',
+          image: IMG('pyramid-1'), caption: 'הפירמידה.',
+        },
+        {
+          type: 'text', title: 'המדידות בנקודות האחרונות',
+          bullets: [
+            'כדי לחסוך בצלילות חופשיות, בחנו את צורת האובייקטים מפני המים והערכנו גודל לפי מרחק.',
+            'באובייקט מלבני הערכנו שהיחס בין הצלעות הוא בערך 2:3. מדדנו צלע אחת והערכנו את השנייה לפי היחס.',
+            'בפירמידה מדדנו צלע אחת, בהנחה שהצלעות המקבילות לה שוות באורכן, ומדדנו את הגובה.',
+            'המצלמה שימשה נקודת ציון בלבד, ולכן לא מדדנו את הממדים שלה.',
+            'כל נקודה כזו נבדקה בצלילה חופשית אחת או שתיים: אימות עומק או גובה ומדידה של ממד אחד, שממנו הוערכו השאר.',
+          ],
+        },
+      ],
+    },
   },
-  snorkel: {
-    title: 'צוות המשקיפים',
-    slides: [
-      {
-        type: 'text',
-        title: 'מה עשה צוות המשקיפים',
-        body: 'צוות השנורקל והצלילה החופשית ליווה את הצוללים מפני המים. המשקיפים סימנו את הנקודות במצופים, רשמו נקודת ציון מעל כל עצם ושמרו על קשר עין עם הצוללים לאורך כל המסלול.',
-      },
-      {
-        type: 'people',
-        title: 'חברי הצוות',
-        people: [
-          { name: '[שם]', role: 'תצפית ובטיחות' },
-          { name: '[שם]', role: 'סימון במצופים' },
-          { name: '[שם]', role: 'רישום נקודות ציון' },
-        ],
-      },
-    ],
-  },
-  plan: {
-    title: 'תכנון המשימה',
-    slides: [
-      {
-        type: 'text',
-        title: 'מטרת המשימה',
-        body: 'למפות את העצמים שמתחת למים בחוף המכון הבין־אוניברסיטאי באילת, ולהציג את הקרקעית בשלושה חתכי עומק: 3, 6 ו־9 מטר.',
-      },
-      { type: 'image', title: 'האתר מלמעלה', image: 'assets/photos/satellite-1.jpg', caption: 'תמונת לוויין של חוף המכון והמזח. מקור: GovMap.' },
-      { type: 'route', title: 'המסלול' },
-      { type: 'profile', title: 'חתך עומק לאורך המסלול' },
-      { type: 'bands', title: 'הנקודות לפי עומק' },
-    ],
+  en: {
+    plan: {
+      title: 'Mission plan',
+      slides: [
+        {
+          type: 'text', title: 'Underwater mapping off the Institute',
+          lead: 'We mapped the seabed off the Interuniversity Institute for Marine Sciences in Eilat, from north to south. The survey covered eight waypoints and a description of the bottom cover and relief.',
+          bullets: ['At each point we measured length, width and height, the bearing, and the distance between objects.'],
+          image: IMG('satellite-1'), caption: 'The Institute beach and pier from above. Source: GovMap.',
+        },
+        {
+          type: 'groups', title: 'Who did what',
+          lead: 'There were four of us, split into two pairs.',
+          groups: [
+            { title: 'Dive team', sub: 'Scuba', members: ['Coral', 'Amit'] },
+            { title: 'Snorkel team', sub: 'Snorkel and freediving', members: ['Shira', 'Roy'] },
+          ],
+        },
+        {
+          type: 'text', title: 'How we measured',
+          list: [
+            ['Depth', 'With a dive computer.'],
+            ['Size', 'With a measuring tape.'],
+            ['Bearing and distance', 'Both teams measured between consecutive points, so we could compare results and check each other.'],
+            ['Distances', 'With the tape where possible; elsewhere estimated by counting fin kicks.'],
+            ['Recording', 'In tables on the slates. Bottom type, cover and structures were described during the survey.'],
+          ],
+          image: IMG('nursery-15'), caption: 'Taping a measurement over the nursery.',
+        },
+        {
+          type: 'text', title: 'What we did, and the limits',
+          bullets: [
+            'The survey followed the roles we planned.',
+            'Because of the dive profile, the scuba team only mapped the area north of the jetty (points 1–6). The snorkel team filled in the missing measurements and continued from there.',
+            'The camera battery ran out at point 6, so there are fewer photos from that point on.',
+            'The approved maximum depth was 10 m. The deepest reading was 10.4 m, 0.4 m over the limit.',
+          ],
+          stats: [['50', 'minutes, scuba dive time'], ['6', 'points north of the jetty, on scuba'], ['10.4', 'm, deepest reading']],
+        },
+        { type: 'route', title: 'The route' },
+        { type: 'profile', title: 'Depth profile along the route' },
+        { type: 'bands', title: 'Points by depth' },
+      ],
+    },
+    divers: {
+      title: 'Dive team',
+      slides: [
+        {
+          type: 'text', title: 'The scuba team',
+          lead: 'Coral and Amit, on scuba.',
+          bullets: [
+            'We measured the depth and size of each object.',
+            'We took the bearing to the next point and measured or estimated the distance.',
+            'We described the seabed at every point.',
+          ],
+          image: IMG('divers-1'),
+        },
+        {
+          type: 'text', title: 'Equipment',
+          list: [
+            ['Full scuba gear', ''],
+            ['Compass', 'For the bearing to the next point.'],
+            ['Dive computer', 'For depth.'],
+            ['Measuring tape', 'For sizes and distances.'],
+            ['Slate', 'With a table we prepared in advance.'],
+          ],
+          image: IMG('nursery-16'), caption: 'Measuring the nursery with the tape.',
+        },
+        {
+          type: 'text', title: 'What we mapped',
+          lead: 'Because of the dive profile we mapped the area north of the jetty, points 1–6, from the nursery to the pier.',
+          stats: [['50', 'minutes underwater'], ['6', 'points'], ['10.4', 'm, deepest reading']],
+          image: IMG('tables3-5'), caption: 'Measuring at one of the three tables.',
+        },
+      ],
+    },
+    snorkel: {
+      title: 'Snorkel team',
+      slides: [
+        {
+          type: 'text', title: 'The snorkel team',
+          lead: 'Shira and Roy, snorkelling and freediving. They worked above the dive team until the dive ended.',
+          bullets: [
+            'Filled in measurements and records the scuba team did not get to, including depths and object sizes.',
+            'Measured bearings and distances and described the seabed.',
+            'Photographed the objects from above and from the side.',
+          ],
+          image: IMG('flowering-5'), caption: 'The flowering table from above.',
+        },
+        {
+          type: 'text', title: 'Equipment',
+          list: [['Snorkel and mask', ''], ['Compass', ''], ['Camera', ''], ['Measuring tape and weight', ''], ['Slate', 'With a prepared table.']],
+          image: IMG('pier-5'), caption: 'The pier from the surface.',
+        },
+        {
+          type: 'text', title: 'Mapping south of the pier',
+          lead: 'Once the scuba team finished the six northern points at the pier, the snorkel team carried on alone to the two points south of the pier, and added points along the route that were planned to be filled in at this stage.',
+          image: IMG('pyramid-1'), caption: 'The pyramid.',
+        },
+        {
+          type: 'text', title: 'Measuring the last points',
+          bullets: [
+            'To save freedives, we studied each object’s shape from the surface and estimated size from distance.',
+            'For rectangular objects we estimated the sides at about 2:3, measured one side and worked out the other from the ratio.',
+            'On the pyramid we measured one side, assuming the matching sides are equal, and measured the height.',
+            'The camera was only a waypoint, so we did not measure it.',
+            'Each of these points took one or two freedives: checking depth or height and measuring one dimension, from which the rest were estimated.',
+          ],
+        },
+      ],
+    },
   },
 };

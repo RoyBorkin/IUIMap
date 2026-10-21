@@ -4,6 +4,8 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID } from './data.js';
+import { UI } from './i18n.js';
+import { qrSVG } from './qr.js';
 import { Kit, buildObject, buildPier, buildScatter } from './models.js';
 
 THREE.ColorManagement.enabled = false;
@@ -18,6 +20,18 @@ const deg = (r) => (r * 180) / Math.PI;
 const isPhone = () => window.matchMedia('(max-width: 760px)').matches;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtNum = (n) => (Math.round(n * 10) / 10).toString();
+/* ── language ── */
+let LANG = (() => {
+  try {
+    const q = new URLSearchParams(location.search).get('lang');
+    if (q === 'en' || q === 'he') return q;
+    return localStorage.getItem('iui-lang') === 'en' ? 'en' : 'he';
+  } catch { return 'he'; }
+})();
+const t = (k, ...a) => { const v = UI[LANG][k]; return typeof v === 'function' ? v(...a) : v; };
+const tx = (p, f) => (LANG === 'en' && p.en && p.en[f] != null ? p.en[f] : p[f]);
+const nm = (p) => tx(p, 'name');
+const isRTL = () => LANG === 'he';
 // keep numeric ranges like 7–10 in reading order inside right-to-left text
 const num = (v) => `\u2066${v}\u2069`;
 
@@ -38,7 +52,7 @@ POINTS.forEach((p) => {
   p.hasDepth = p.depth.length > 0;
   p.depthMid = p.hasDepth ? avg(p.depth) : null;
   p.depthMax = p.hasDepth ? Math.max(...p.depth) : null;
-  p.depthText = p.hasDepth ? num(p.depth.length > 1 ? `${p.depth[0]}–${p.depth[1]}` : `${p.depth[0]}`) : 'לא נמדד';
+  p.depthText = p.hasDepth ? num(p.depth.length > 1 ? `${p.depth[0]}–${p.depth[1]}` : `${p.depth[0]}`) : '';
   p.station = MAIN.indexOf(p.id) + 1;
   if (p.lat) {
     p.latDec = ddm(p.lat); p.lonDec = ddm(p.lon);
@@ -171,7 +185,7 @@ let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
 } catch (err) {
-  $('#stage').insertAdjacentHTML('beforeend', '<p class="noscript">הדפדפן לא תומך בתלת־ממד (WebGL). מפת הלוויין והשקופיות עדיין זמינות.</p>');
+  $('#stage').insertAdjacentHTML('beforeend', `<p class="noscript">${t('noWebgl')}</p>`);
 }
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(34, 1, 0.5, 4000);
@@ -491,8 +505,6 @@ const labels = POINTS.map((p) => {
   const el = document.createElement('button');
   el.type = 'button';
   el.className = 'plabel';
-  el.innerHTML = `<span class="pname">${esc(p.name)}</span><span class="snd">${p.hasDepth ? p.depthText : ''}${p.live ? ' מ׳, שידור חי' : ''}</span>`;
-  el.setAttribute('aria-label', p.hasDepth ? `${p.name}, עומק ${p.depthText} מטר` : p.name);
   el.addEventListener('click', () => select(p.id));
   labelLayer.appendChild(el);
   return { p, el, w: 0, h: 0 };
@@ -502,7 +514,7 @@ const legLabels = [...ROUTE.map((l) => ({ ...l, main: true })), ...BRANCHES.filt
   const el = document.createElement('div');
   el.className = 'leg';
   el.setAttribute('aria-hidden', 'true');
-  el.innerHTML = `<b>${l.bearing}°</b>${l.dist ? `${num(l.dist)} מ׳` : ''}`;
+  el.dataset.b = l.bearing; el.dataset.d = l.dist || '';
   labelLayer.appendChild(el);
   const me = (a.e + b.e) / 2, mn = (a.n + b.n) / 2;
   return { el, pos: W(me, mn, yAt(me, mn) + 0.6), w: 0, h: 0 };
@@ -511,10 +523,18 @@ const sliceLabels = SITE.slices.map((d) => {
   const el = document.createElement('div');
   el.className = 'slabel';
   el.setAttribute('aria-hidden', 'true');
-  el.textContent = `${d} מ׳`;
   labelLayer.appendChild(el);
   return { d, el };
 });
+function fillLabels() {
+  labels.forEach(({ p, el }) => {
+    el.innerHTML = `<span class="pname">${esc(nm(p))}</span><span class="snd">${p.hasDepth ? p.depthText : ''}${p.live ? t('liveSnd') : ''}</span>`;
+    el.setAttribute('aria-label', p.hasDepth ? t('depthAria', nm(p), p.depthText) : nm(p));
+  });
+  legLabels.forEach(({ el }) => { el.innerHTML = `<b>${el.dataset.b}°</b>${el.dataset.d ? `${num(el.dataset.d)} ${t('m')}` : ''}`; });
+  sliceLabels.forEach(({ d, el }) => { el.textContent = `${d} ${t('m')}`; });
+}
+fillLabels();
 function measureLabels() {
   [...labels, ...legLabels].forEach((l) => {
     const was = l.el.hidden;
@@ -544,7 +564,7 @@ function panelOffset(open) {
   if (!open) return { x: 0, y: 0 };
   const panel = $('#panel');
   if (isPhone()) return { x: 0, y: Math.min(panel.offsetHeight, vh * 0.74) / 2 };
-  return { x: -(panel.offsetWidth + 16) / 2, y: 0 };
+  return { x: ((isRTL() ? -1 : 1) * (panel.offsetWidth + 16)) / 2, y: 0 };
 }
 
 /* ═════════════ camera framing & flights ═════════════ */
@@ -620,8 +640,8 @@ function edgesOf(p) {
     let b = l.bearing;
     if (b === null || b === undefined || (!forward)) b = b === null || b === undefined ? Math.round(bearingBetween(p, other)) : (b + 180) % 360;
     const d = num(l.dist || `≈${Math.round(distBetween(p, other))}`);
-    let kind = 'הסתעפות';
-    if (main) kind = forward ? 'הבאה במסלול' : 'הקודמת במסלול';
+    let kind = t('kBranch');
+    if (main) kind = forward ? t('kNext') : t('kPrev');
     out.push({ other, bearing: b, dist: d, kind, order: main ? (forward ? 0 : 1) : 2 });
   };
   ROUTE.forEach((l) => add(l, true));
@@ -635,19 +655,19 @@ function bearingIcon(b) {
 }
 
 function dimsText(p) {
-  if (p.dimsText) return p.dimsText;
-  if (!p.dims.length) return `<span class="muted">${p.live ? 'לא רלוונטי' : 'לא נמדדו'}</span>`;
+  if (p.dimsText) return esc(tx(p, 'dimsText'));
+  if (!p.dims.length) return `<span class="muted">${p.live ? t('notRelevant') : t('notMeasuredPl')}</span>`;
   const [w, l, h] = p.dims;
-  return `רוחב ${w}, אורך ${l}, גובה ${h} מ׳`;
+  return t('dims', w, l, h);
 }
 
 function sketchSVG(p) {
   const Wd = 300, Hd = 180, pad = 30;
   if (p.shape === 'camera') {
-    return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="שרטוט מצלמה"><g class="sk" transform="translate(110 40)"><rect x="0" y="20" width="62" height="40" rx="4"/><circle cx="31" cy="40" r="12"/><circle cx="31" cy="40" r="5"/><path d="M62 30l20-10v40l-20-10"/><path d="M31 60v40M31 100l-22 30M31 100l22 30"/></g></svg>`;
+    return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="${t('skCam')}"><g class="sk" transform="translate(110 40)"><rect x="0" y="20" width="62" height="40" rx="4"/><circle cx="31" cy="40" r="12"/><circle cx="31" cy="40" r="5"/><path d="M62 30l20-10v40l-20-10"/><path d="M31 60v40M31 100l-22 30M31 100l22 30"/></g></svg>`;
   }
   if (p.shape === 'pier') {
-    return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="שרטוט מזח במבט על"><g transform="translate(40 40)"><path class="sk" d="M0 0H220M0 90H220"/><path class="sk-hid" d="M220 0V90"/><path class="sk-ground" d="M0 0V90" stroke-dasharray="1 4"/><path class="sk-dim" d="M190 6V84M184 12l6-6 6 6M184 78l6 6 6-6"/><text x="150" y="50" text-anchor="middle">9 מ׳</text></g></svg>`;
+    return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="${t('skPier')}"><g transform="translate(40 40)"><path class="sk" d="M0 0H220M0 90H220"/><path class="sk-hid" d="M220 0V90"/><path class="sk-ground" d="M0 0V90" stroke-dasharray="1 4"/><path class="sk-dim" d="M190 6V84M184 12l6-6 6 6M184 78l6 6 6-6"/><text x="150" y="50" text-anchor="middle">9 ${t('m')}</text></g></svg>`;
   }
   const c30 = Math.cos(rad(30)), s30 = Math.sin(rad(30));
   const iso = (x, y, z) => [(x - y) * c30, (x + y) * s30 - z];
@@ -658,10 +678,10 @@ function sketchSVG(p) {
     corners = [A, B, C, top];
     edges = [[B, C], [C, A], [A, top], [B, top], [C, top]];
     hidden = [[A, B]];
-    dims = [[A, C, `צלע ${s}`, [-26, 10]], [B, top, `גובה ${h}`, [30, 0]]];
+    dims = [[A, C, `${t('skSide')} ${s}`, [-26, 10]], [B, top, `${t('skH')} ${h}`, [30, 0]]];
   } else if (p.shape === 'cylinder') {
     const [d, l] = p.dims;
-    return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="שרטוט גליל"><g transform="translate(60 50)"><ellipse class="sk" cx="170" cy="40" rx="18" ry="40"/><path class="sk" d="M10 0H170M10 80H170"/><path class="sk-hid" d="M10 0a18 40 0 0 0 0 80"/><path class="sk" d="M10 0a18 40 0 0 1 0 80"/><path class="sk-dim" d="M10 100H170"/><text x="90" y="118" text-anchor="middle">אורך ${l}</text><path class="sk-dim" d="M205 0V80"/><text x="212" y="44" text-anchor="start">קוטר ${d}</text></g></svg>`;
+    return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="${t('skCyl')}"><g transform="translate(60 50)"><ellipse class="sk" cx="170" cy="40" rx="18" ry="40"/><path class="sk" d="M10 0H170M10 80H170"/><path class="sk-hid" d="M10 0a18 40 0 0 0 0 80"/><path class="sk" d="M10 0a18 40 0 0 1 0 80"/><path class="sk-dim" d="M10 100H170"/><text x="90" y="118" text-anchor="middle">${t('skL')} ${l}</text><path class="sk-dim" d="M205 0V80"/><text x="212" y="44" text-anchor="start">${t('skDiam')} ${d}</text></g></svg>`;
   } else {
     const [w, l, h] = p.dims;
     const P = (x, y, z) => [x, y, z];
@@ -670,7 +690,7 @@ function sketchSVG(p) {
     corners = [o, x1, y1, xy, oz, xz, yz, xyz];
     edges = [[x1, xy], [y1, xy], [x1, xz], [y1, yz], [xy, xyz], [oz, xz], [oz, yz], [xz, xyz], [yz, xyz]];
     hidden = [[o, x1], [o, y1], [o, oz]];
-    dims = [[y1, xy, `רוחב ${w}`, [-26, 14]], [x1, xy, `אורך ${l}`, [26, 14]], [y1, yz, `גובה ${h}`, [-34, 4]]];
+    dims = [[y1, xy, `${t('skW')} ${w}`, [-26, 14]], [x1, xy, `${t('skL')} ${l}`, [26, 14]], [y1, yz, `${t('skH')} ${h}`, [-34, 4]]];
   }
   const pr = corners.map((c) => iso(...c));
   const xs = pr.map((q) => q[0]), ys = pr.map((q) => q[1]);
@@ -685,63 +705,63 @@ function sketchSVG(p) {
     const off = side;
     return `<text x="${(mx + off[0]).toFixed(1)}" y="${(my + off[1]).toFixed(1)}" text-anchor="middle">${t}</text>`;
   }).join('');
-  return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="שרטוט לפי המידות"><path class="sk-hid" d="${hidden.map((e) => seg(...e)).join('')}"/><path class="sk" d="${edges.map((e) => seg(...e)).join('')}"/>${dimMarks}</svg>`;
+  return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="${t('skAria')}"><path class="sk-hid" d="${hidden.map((e) => seg(...e)).join('')}"/><path class="sk" d="${edges.map((e) => seg(...e)).join('')}"/>${dimMarks}</svg>`;
 }
 
 const thumb = (src) => src.replace(/\.jpg$/i, '-s.jpg');
 function mediaHTML(p) {
   let html = '';
   if (p.live) {
-    html += `<div class="p-media"><p class="live-tag">שידור חי</p><div class="live"><iframe src="https://www.youtube-nocookie.com/embed/${LIVE_CAMERA_YOUTUBE_ID}?autoplay=1&mute=1&playsinline=1&rel=0" title="מצלמה תת־ימית בשידור חי" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div><a class="live-link" href="https://www.youtube.com/watch?v=${LIVE_CAMERA_YOUTUBE_ID}" target="_blank" rel="noopener">פתיחה ביוטיוב</a></div>`;
+    html += `<div class="p-media"><p class="live-tag">${t('live')}</p><div class="live"><iframe src="https://www.youtube-nocookie.com/embed/${LIVE_CAMERA_YOUTUBE_ID}?autoplay=1&mute=1&playsinline=1&rel=0" title="${t('liveTitle')}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div><a class="live-link" href="https://www.youtube.com/watch?v=${LIVE_CAMERA_YOUTUBE_ID}" target="_blank" rel="noopener">${t('openYT')}</a></div>`;
   }
   if (p.photos && p.photos.length) {
-    html += `<div class="p-media"><div class="gallery">${p.photos.map((ph, i) => `<button type="button" data-photo="${i}" aria-label="הגדלת תמונה ${i + 1} מתוך ${p.photos.length}"><img src="${esc(thumb(ph.src))}" alt="${esc(ph.caption || `${p.name}, תמונה ${i + 1}`)}" loading="lazy" decoding="async"></button>`).join('')}</div><p class="gallery-count">${p.photos.length} תמונות מהצלילה. לחיצה על תמונה מגדילה אותה.</p></div>`;
+    html += `<div class="p-media"><div class="gallery">${p.photos.map((ph, i) => `<button type="button" data-photo="${i}" aria-label="${t('photoAria', i + 1, p.photos.length)}"><img src="${esc(thumb(ph.src))}" alt="${esc(ph.caption || t('photoAlt', nm(p), i + 1))}" loading="lazy" decoding="async"></button>`).join('')}</div><p class="gallery-count">${t('photosCount', p.photos.length)}</p></div>`;
   } else if (!p.live && p.dims.length) {
-    html += `<figure class="p-media sketch">${sketchSVG(p)}<p>שרטוט לפי המידות שנמדדו. עדיין אין תמונות לנקודה הזו.</p></figure>`;
+    html += `<figure class="p-media sketch">${sketchSVG(p)}<p>${t('sketchNote')}</p></figure>`;
   }
   return html;
 }
 
 function renderPanel(p) {
-  const kicker = p.live ? 'מצלמה תת־ימית' : p.station ? `תחנה ${p.station} מתוך ${MAIN.length} במסלול` : 'נקודת צד';
+  const kicker = p.live ? t('camKicker') : p.station ? t('station', p.station, MAIN.length) : t('side');
   const legs = edgesOf(p);
-  const material = p.material ? esc(p.material) : '<span class="muted">לא תועד</span>';
+  const material = p.material ? esc(tx(p, 'material')) : `<span class="muted">${t('notRecorded')}</span>`;
   const est = p.estimated
-    ? `<span class="est">מיקום משוער: חושב מאזימוט ${p.derive.bearing}° ומרחק ${p.derive.dist} מ׳ מ${esc(byId[p.derive.from].name)}${p.derive.rough ? ', לפי תיאור מילולי' : ''}.</span>`
+    ? `<span class="est">${esc(t('est', p.derive.bearing, p.derive.dist, nm(byId[p.derive.from]), p.derive.rough))}</span>`
     : '';
   panelBody.innerHTML = `
     <header class="p-head">
       <div>
         <p class="p-kicker">${kicker}</p>
-        <h2 class="p-title" id="pTitle"><svg class="x" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3l12 12M15 3L3 15"/></svg>${esc(p.name)}</h2>
+        <h2 class="p-title" id="pTitle"><svg class="x" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3l12 12M15 3L3 15"/></svg>${esc(nm(p))}</h2>
       </div>
-      <button type="button" class="icon-btn" id="pClose" aria-label="סגירת פרטי הנקודה"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button type="button" class="icon-btn" id="pClose" aria-label="${t('close')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
     ${mediaHTML(p)}
     <dl class="facts">
-      <dt>עומק</dt><dd>${p.hasDepth ? `<span class="big">${p.depthText} מ׳</span>` : `<span class="muted">לא נמדד</span>`}</dd>
-      <dt>מידות</dt><dd>${dimsText(p)}</dd>
-      <dt>קרקעית</dt><dd>${p.terrain ? esc(p.terrain) : '<span class="muted">לא תועד</span>'}</dd>
-      <dt>חומר</dt><dd>${material}</dd>
-      <dt>נ.צ.</dt><dd><div class="coord"><span>${ddmText(p.latDec, true)}</span><span>${ddmText(p.lonDec, false)}</span></div><button type="button" class="copy" id="pCopy">העתקת נ.צ.</button>${est}</dd>
+      <dt>${t('fDepth')}</dt><dd>${p.hasDepth ? `<span class="big">${p.depthText} ${t('m')}</span>` : `<span class="muted">${t('notMeasured')}</span>`}</dd>
+      <dt>${t('fDims')}</dt><dd>${dimsText(p)}</dd>
+      <dt>${t('fTerrain')}</dt><dd>${p.terrain ? esc(tx(p, 'terrain')) : `<span class="muted">${t('notRecorded')}</span>`}</dd>
+      <dt>${t('fMaterial')}</dt><dd>${material}</dd>
+      <dt>${t('fCoords')}</dt><dd><div class="coord"><span>${ddmText(p.latDec, true)}</span><span>${ddmText(p.lonDec, false)}</span></div><button type="button" class="copy" id="pCopy">${t('copy')}</button>${est}</dd>
     </dl>
-    ${p.note ? `<p class="p-note">${esc(p.note)}</p>` : ''}
-    ${p.model && p.photos.length ? '<p class="p-note">המודל התלת־ממדי במפה הוא דגם מייצג שנבנה לפי התמונות והמידות.</p>' : ''}
-    ${p.model && !p.photos.length ? '<p class="p-note">אין עדיין תמונות לנקודה, ולכן המודל במפה כללי ומבוסס על המידות בלבד.</p>' : ''}
-    ${legs.length ? `<section class="legs"><h3>מכאן ממשיכים אל</h3>${legs.map((l) => `
+    ${p.note ? `<p class="p-note">${esc(tx(p, 'note'))}</p>` : ''}
+    ${p.model && p.photos.length ? `<p class="p-note">${t('modelPhotos')}</p>` : ''}
+    ${p.model && !p.photos.length ? `<p class="p-note">${t('modelGeneric')}</p>` : ''}
+    ${legs.length ? `<section class="legs"><h3>${t('legsTitle')}</h3>${legs.map((l) => `
       <button type="button" class="leg-btn" data-go="${l.other.id}">
         ${bearingIcon(l.bearing)}
-        <span class="lt"><b>${esc(l.other.name)}</b><span>${l.kind}, אזימוט ${l.bearing}°${l.dist ? `, ${l.dist} מ׳` : ''}</span></span>
+        <span class="lt"><b>${esc(nm(l.other))}</b><span>${t('legLine', l.kind, l.bearing, l.dist)}</span></span>
       </button>`).join('')}</section>` : ''}
   `;
   $('#pClose').addEventListener('click', closePanel);
   $('#pCopy').addEventListener('click', async (ev) => {
     const txt = `${p.latDec.toFixed(6)}, ${p.lonDec.toFixed(6)}`;
-    try { await navigator.clipboard.writeText(txt); ev.target.textContent = 'הנ.צ. הועתק'; }
+    try { await navigator.clipboard.writeText(txt); ev.target.textContent = t('copied'); }
     catch { ev.target.textContent = txt; }
   });
   panelBody.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => select(b.dataset.go)));
-  panelBody.querySelectorAll('[data-photo]').forEach((b) => b.addEventListener('click', () => openPhoto(p.photos, +b.dataset.photo, p.name)));
+  panelBody.querySelectorAll('[data-photo]').forEach((b) => b.addEventListener('click', () => openPhoto(p.photos, +b.dataset.photo, nm(p))));
 }
 
 function select(id, { fromMap = false, instant = false } = {}) {
@@ -818,7 +838,7 @@ let map = null;
 const mapMarkers = {};
 let viewPoly = null, viewDot = null;
 function initMap() {
-  if (!window.L) { $('#insetMap').innerHTML = '<p style="padding:12px;font-size:13px">מפת הלוויין לא נטענה.</p>'; return; }
+  if (!window.L) { $('#insetMap').innerHTML = `<p style="padding:12px;font-size:13px">${t('insetFail')}</p>`; return; }
   map = L.map('insetMap', { zoomControl: true, attributionControl: true, zoomSnap: 0.25, maxZoom: 21 });
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxNativeZoom: 19, maxZoom: 21,
@@ -833,7 +853,7 @@ function initMap() {
       icon: L.divIcon({ className: '', html: '<span class="ix"></span>', iconSize: [20, 20], iconAnchor: [10, 10] }),
       title: p.name, keyboard: true, riseOnHover: true,
     }).addTo(map);
-    m.bindTooltip(p.name, { direction: 'top', offset: [0, -10], className: 'ix-tip' });
+    m.bindTooltip(nm(p), { direction: 'top', offset: [0, -10], className: 'ix-tip' });
     m.on('click', () => select(p.id, { fromMap: true }));
     mapMarkers[p.id] = m;
   });
@@ -891,8 +911,7 @@ SITE.slices.forEach((d, i) => {
   b.type = 'button';
   b.className = 'chip';
   b.setAttribute('aria-pressed', 'true');
-  b.textContent = `${d} מ׳`;
-  b.setAttribute('aria-label', `חתך בעומק ${d} מטר`);
+  b.dataset.d = d;
   b.addEventListener('click', () => {
     const s = slices[d];
     s.on = !s.on;
@@ -908,15 +927,15 @@ SITE.slices.forEach((d, i) => {
 /* ═════════════ meta line ═════════════ */
 {
   const depths = POINTS.flatMap((p) => p.depth);
-  $('#meta').textContent = `${POINTS.length} נקודות מסומנות, עומק ${Math.min(...depths)} עד ${Math.max(...depths)} מטר. הקרקעית מחושבת מהעומקים שנמדדו ומוגבהת פי ${EX} לאורך הציר האנכי.`;
+  $('#meta').dataset.a = Math.min(...depths); $('#meta').dataset.b = Math.max(...depths);
 }
 
 /* ═════════════ theme ═════════════ */
 const themeBtn = $('#themeToggle');
 function syncThemeButton() {
   const dark = document.documentElement.dataset.theme === 'dark';
-  themeBtn.setAttribute('aria-label', dark ? 'מעבר לתצוגה בהירה' : 'מעבר לתצוגה כהה');
-  $('.tb-theme-label').textContent = dark ? 'תצוגה בהירה' : 'תצוגה כהה';
+  themeBtn.setAttribute('aria-label', dark ? t('toLight') : t('toDark'));
+  $('.tb-theme-label').textContent = dark ? t('themeLight') : t('themeDark');
 }
 function applyTheme() {
   T = readTheme();
@@ -987,7 +1006,7 @@ function updateWidgets() {
   if (key !== lastScale) {
     lastScale = key;
     scaleBar.style.width = `${Math.round(m / mpp)}px`;
-    scaleText.textContent = `${m} מ׳`;
+    scaleText.textContent = `${m} ${t('m')}`;
   }
 }
 
@@ -1008,7 +1027,7 @@ function layoutLabels() {
     const s = toScreen(markers.find((m) => m.p === l.p).grp.position);
     if (!s || s.x < -40 || s.y < -40 || s.x > vw + 40 || s.y > vh + 40) { l.el.hidden = true; continue; }
     screenPos.set(l.p, s);
-    const box = { x: s.x - 26 - l.w, y: s.y - l.h / 2, w: l.w, h: l.h };
+    const box = { x: isRTL() ? s.x - 26 - l.w : s.x + 26, y: s.y - l.h / 2, w: l.w, h: l.h };
     const clash = placed.some((b) => overlap(box, b));
     if (clash && l.p !== selected) { l.el.hidden = true; continue; }
     l.el.hidden = false;
@@ -1037,6 +1056,8 @@ function layoutLabels() {
 /* ═════════════ loop ═════════════ */
 const introStart = performance.now() + 250;
 function frame(now) {
+  // a dialog covers the map: skip drawing until it closes
+  if (deck.open || lb.open || qrDlg.open) { requestAnimationFrame(frame); return; }
   stepFlight(now);
   controls.update();
   // constant on-screen size for X marks, plus a stamped-in intro
@@ -1068,6 +1089,8 @@ function frame(now) {
 const deck = $('#deck');
 let deckState = null;
 const dNum = (s) => { const m = String(s).split('–').map(Number); return m.length > 1 ? (m[0] + m[1]) / 2 : m[0]; };
+// text-anchor that makes a label grow away from its point, in either reading direction
+const growLeft = () => (isRTL() ? 'start' : 'end');
 
 function routeFigure() {
   const es = POINTS.map((p) => p.e), ns = POINTS.map((p) => p.n);
@@ -1081,20 +1104,21 @@ function routeFigure() {
   for (let n = Math.ceil(minN / 20) * 20; n <= maxN; n += 20) grid.push(`<path class="f-grid" d="M10 ${(oy + (maxN - n) * k).toFixed(1)}H${Wd - 10}"/>`);
   const lines = (arr, cls) => arr.map((l) => `<path class="${cls}" d="M${X(byId[l.from]).toFixed(1)} ${Y(byId[l.from]).toFixed(1)}L${X(byId[l.to]).toFixed(1)} ${Y(byId[l.to]).toFixed(1)}"/>`).join('');
   const xs = POINTS.map((p) => { const x = X(p), y = Y(p); return `<path class="f-x" d="M${x - 4} ${y - 4}l8 8m0-8l-8 8"/>`; }).join('');
-  const names = POINTS.filter((p) => p.station || p.live).map((p) => `<text class="f-name" x="${(X(p) - 9).toFixed(1)}" y="${(Y(p) + 4).toFixed(1)}" text-anchor="start">${esc(p.name)}</text>`).join('');
+  const names = POINTS.filter((p) => p.station || p.live).map((p) => `<text class="f-name" x="${(X(p) - 9).toFixed(1)}" y="${(Y(p) + 4).toFixed(1)}" text-anchor="${growLeft()}">${esc(nm(p))}</text>`).join('');
   const scale = 20 * k;
-  return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="תרשים המסלול במבט על">${grid.join('')}${lines(BRANCHES, 'f-branch')}${lines(ROUTE, 'f-route')}${xs}${names}
-    <g transform="translate(${Wd - 34} 40)"><path class="f-line" d="M0 18V-14M-5 -8L0 -16 5 -8"/><text x="0" y="32" text-anchor="middle">צפון</text></g>
-    <g transform="translate(30 ${Hd - 22})"><path class="f-line" d="M0 0H${scale.toFixed(1)}M0 -4V4M${scale.toFixed(1)} -4V4"/><text x="${(scale / 2).toFixed(1)}" y="-8" text-anchor="middle">20 מ׳</text></g></svg>`;
+  return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="${t('routeAria')}">${grid.join('')}${lines(BRANCHES, 'f-branch')}${lines(ROUTE, 'f-route')}${xs}${names}
+    <g transform="translate(${Wd - 34} 40)"><path class="f-line" d="M0 18V-14M-5 -8L0 -16 5 -8"/><text x="0" y="32" text-anchor="middle">${t('north')}</text></g>
+    <g transform="translate(30 ${Hd - 22})"><path class="f-line" d="M0 0H${scale.toFixed(1)}M0 -4V4M${scale.toFixed(1)} -4V4"/><text x="${(scale / 2).toFixed(1)}" y="-8" text-anchor="middle">20 ${t('m')}</text></g></svg>`;
 }
 function routeTable() {
   let lo = 0, hi = 0;
   const rows = ROUTE.map((l) => {
     const [a, b] = String(l.dist).split('–').map(Number);
     lo += a; hi += b || a;
-    return `<tr><td>${esc(byId[l.from].name)} אל ${esc(byId[l.to].name)}</td><td>${l.bearing}°</td><td>${num(l.dist)}</td></tr>`;
+    return `<tr><td>${esc(t('legTo', nm(byId[l.from]), nm(byId[l.to])))}</td><td>${l.bearing}°</td><td>${num(l.dist)}</td></tr>`;
   }).join('');
-  return `<table class="legtable"><thead><tr><th>קטע</th><th>אזימוט</th><th>מטרים</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>אורך המסלול</td><td></td><td>${num(lo === hi ? lo : `${lo}–${hi}`)}</td></tr></tfoot></table>`;
+  const [h1, h2, h3] = t('legHead');
+  return `<table class="legtable"><thead><tr><th>${h1}</th><th>${h2}</th><th>${h3}</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>${t('routeLen')}</td><td></td><td>${num(lo === hi ? lo : `${lo}–${hi}`)}</td></tr></tfoot></table>`;
 }
 function profileFigure() {
   const Wd = 860, Hd = 360, L = 130, R = 30, Tt = 56, B = 34;
@@ -1102,48 +1126,51 @@ function profileFigure() {
   const st = [{ p: byId[MAIN[0]], x: 0 }];
   ROUTE.forEach((l) => { x += dNum(l.dist); st.push({ p: byId[l.to], x }); });
   const maxX = x, maxD = 12;
-  const sx = (v) => Wd - R - (v / maxX) * (Wd - L - R); // RTL: start at right
+  // the route starts on the reading-start side: right in Hebrew, left in English
+  const left = isRTL() ? L : 64, right = isRTL() ? R : 112;
+  const sx = (v) => (isRTL() ? Wd - right - (v / maxX) * (Wd - left - right) : left + (v / maxX) * (Wd - left - right));
   const sy = (d) => Tt + (d / maxD) * (Hd - Tt - B);
   const bed = st.map((s) => `${sx(s.x).toFixed(1)},${sy(s.p.depthMid).toFixed(1)}`).join(' ');
   const poly = `${sx(0)},${Hd - B} ${bed} ${sx(maxX)},${Hd - B}`;
-  const slicesSvg = SITE.slices.map((d) => `<path class="f-slice" d="M${L} ${sy(d)}H${Wd - R}"/><text class="f-slice-t" x="${L - 6}" y="${sy(d) + 4}" text-anchor="start">${d} מ׳</text>`).join('');
+  const labX = isRTL() ? left - 6 : Wd - right + 6;
+  const labA = isRTL() ? 'start' : 'start';
+  const slicesSvg = SITE.slices.map((d) => `<path class="f-slice" d="M${left} ${sy(d)}H${Wd - right}"/><text class="f-slice-t" x="${labX}" y="${sy(d) + 4}" text-anchor="${labA}">${d} ${t('m')}</text>`).join('');
   const ranges = st.filter((s) => s.p.depth.length > 1).map((s) => `<path class="f-line" d="M${sx(s.x)} ${sy(s.p.depth[0])}V${sy(s.p.depth[1])}" stroke-width="3" opacity=".35"/>`).join('');
   const xs = st.map((s, i) => {
     const X = sx(s.x), Y = sy(s.p.depthMid);
     const up = i % 2 === 0;
-    return `<path class="f-x" d="M${X - 5} ${Y - 5}l10 10m0-10l-10 10"/><path class="f-grid" d="M${X} ${Tt - 6}V${Y - 8}"/><text class="f-name" x="${X}" y="${up ? Tt - 12 : Tt - 30}" text-anchor="middle">${esc(s.p.name)}</text>`;
+    return `<path class="f-x" d="M${X - 5} ${Y - 5}l10 10m0-10l-10 10"/><path class="f-grid" d="M${X} ${Tt - 6}V${Y - 8}"/><text class="f-name" x="${X}" y="${up ? Tt - 12 : Tt - 30}" text-anchor="middle">${esc(nm(s.p))}</text>`;
   }).join('');
   const ticks = [0, 50, 100, 150, 200].filter((v) => v <= maxX).map((v) => `<text x="${sx(v)}" y="${Hd - 12}" text-anchor="middle">${v}</text>`).join('');
-  return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="חתך עומק לאורך המסלול, ממשתלה עד פירמידה">
-    <rect class="f-water" x="${L}" y="${Tt}" width="${Wd - L - R}" height="${Hd - Tt - B}"/>
+  return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="${t('profileAria')}">
+    <rect class="f-water" x="${left}" y="${Tt}" width="${Wd - left - right}" height="${Hd - Tt - B}"/>
     <polygon class="f-bed" points="${poly}"/>${slicesSvg}${ranges}${xs}${ticks}
-    <text x="${L - 6}" y="${Hd - 12}" text-anchor="start">מטרים לאורך המסלול</text></svg>`;
+    <text x="${labX}" y="${Hd - 12}" text-anchor="${labA}">${t('profileAxis')}</text></svg>`;
 }
 function bandsHTML() {
   const bands = [[0, 3], [3, 6], [6, 9], [9, 99]];
   return `<div class="bands">${bands.map(([a, b]) => {
     const pts = POINTS.filter((p) => p.hasDepth && p.depthMid >= a && p.depthMid < b);
-    return `<section><h3>${b === 99 ? `${a} מ׳ ומטה` : `${a}–${b} מ׳`}</h3><ul>${pts.length ? pts.map((p) => `<li>${esc(p.name)} <span class="muted">(${p.depthText})</span></li>`).join('') : '<li class="none">אין נקודות</li>'}</ul></section>`;
+    return `<section><h3>${b === 99 ? t('bandDeep', a) : `${num(`${a}–${b}`)} ${t('m')}`}</h3><ul>${pts.length ? pts.map((p) => `<li>${esc(nm(p))} <span class="muted">(${p.depthText})</span></li>`).join('') : `<li class="none">${t('noPoints')}</li>`}</ul></section>`;
   }).join('')}</div>`;
+}
+function fig(s, wide) {
+  return `<figure class="slide-fig${wide ? ' slide-fig-wide' : ''}"><img src="${esc(s.image)}" alt="${esc(s.caption || s.title)}" loading="lazy">${s.caption ? `<figcaption>${esc(s.caption)}</figcaption>` : ''}</figure>`;
 }
 function slideHTML(s) {
   let body = '';
-  if (s.type === 'facts') {
-    const depths = POINTS.flatMap((p) => p.depth);
-    let lo = 0, hi = 0;
-    ROUTE.forEach((l) => { const [a, b] = String(l.dist).split('–').map(Number); lo += a; hi += b || a; });
-    const text = `<p class="lead">${esc(s.body)}</p><div class="stats">
-      <div><b>${POINTS.length}</b><span>נקודות מסומנות</span></div>
-      <div><b>${num(`${lo}–${hi}`)}</b><span>מטר במסלול הראשי</span></div>
-      <div><b>${Math.max(...depths)}</b><span>מטר, העומק המרבי</span></div>
-      <div><b>${Math.min(...depths)}</b><span>מטר, העומק הרדוד</span></div></div>`;
-    body = s.image ? `<div class="slide-cols slide-photo"><div>${text}</div><figure class="slide-fig"><img src="${esc(s.image)}" alt="${esc(s.title)}"></figure></div>` : text;
+  if (s.type === 'text') {
+    const text =
+      (s.lead ? `<p class="lead">${esc(s.lead)}</p>` : '') +
+      (s.bullets ? `<ul class="bullets">${s.bullets.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>` : '') +
+      (s.list ? `<dl class="method">${s.list.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>` : '') +
+      (s.stats ? `<div class="stats">${s.stats.map(([v, l]) => `<div><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join('')}</div>` : '');
+    body = s.image ? `<div class="slide-cols slide-photo"><div>${text}</div>${fig(s)}</div>` : text;
+  } else if (s.type === 'groups') {
+    body = (s.lead ? `<p class="lead">${esc(s.lead)}</p>` : '') +
+      `<div class="groups">${s.groups.map((g) => `<section class="group"><h3>${esc(g.title)}</h3><p>${esc(g.sub)}</p><ul class="people">${g.members.map((m) => `<li><b>${esc(m)}</b></li>`).join('')}</ul></section>`).join('')}</div>`;
   } else if (s.type === 'image') {
-    body = `<figure class="slide-fig slide-fig-wide"><img src="${esc(s.image)}" alt="${esc(s.caption || s.title)}">${s.caption ? `<figcaption>${esc(s.caption)}</figcaption>` : ''}</figure>`;
-  } else if (s.type === 'text') {
-    body = (s.body ? `<p class="lead">${esc(s.body)}</p>` : '') + (s.list ? `<dl class="method">${s.list.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>` : '');
-  } else if (s.type === 'people') {
-    body = `<ul class="people">${s.people.map((m) => `<li><b>${esc(m.name)}</b><span>${esc(m.role)}</span></li>`).join('')}</ul>`;
+    body = fig(s, true);
   } else if (s.type === 'route') {
     body = `<div class="slide-cols"><div class="figure">${routeFigure()}</div>${routeTable()}</div>`;
   } else if (s.type === 'profile') {
@@ -1154,21 +1181,20 @@ function slideHTML(s) {
   return `<article class="slide"><h2 id="deckSlideTitle">${esc(s.title)}</h2>${body}</article>`;
 }
 function showSlide(i) {
-  const d = DECKS[deckState.key];
+  const d = DECKS[LANG][deckState.key];
   deckState.i = clamp(i, 0, d.slides.length - 1);
+  $('#deckName').textContent = d.title;
   $('#deckBody').innerHTML = slideHTML(d.slides[deckState.i]);
   $('#deckBody').scrollTop = 0;
   $('#deckCount').textContent = `${deckState.i + 1} / ${d.slides.length}`;
   $('#deckPrev').disabled = deckState.i === 0;
   $('#deckNext').disabled = deckState.i === d.slides.length - 1;
-  const multi = d.slides.length > 1;
-  $('.deck-foot').style.visibility = multi ? 'visible' : 'hidden';
+  $('.deck-foot').style.visibility = d.slides.length > 1 ? 'visible' : 'hidden';
 }
 let deckOpener = null;
 function openDeck(key, opener) {
   deckOpener = opener;
   deckState = { key, i: 0 };
-  $('#deckName').textContent = DECKS[key].title;
   showSlide(0);
   deck.showModal();
 }
@@ -1178,9 +1204,12 @@ $('#deckPrev').addEventListener('click', () => showSlide(deckState.i - 1));
 $('#deckNext').addEventListener('click', () => showSlide(deckState.i + 1));
 deck.addEventListener('close', () => deckOpener?.focus());
 deck.addEventListener('click', (e) => { if (e.target === deck) deck.close(); });
+// "next" lies in the reading direction: left in Hebrew, right in English
+const nextKey = () => (isRTL() ? 'ArrowLeft' : 'ArrowRight');
+const prevKey = () => (isRTL() ? 'ArrowRight' : 'ArrowLeft');
 deck.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowLeft') { e.preventDefault(); showSlide(deckState.i + 1); }
-  if (e.key === 'ArrowRight') { e.preventDefault(); showSlide(deckState.i - 1); }
+  if (e.key === nextKey()) { e.preventDefault(); showSlide(deckState.i + 1); }
+  if (e.key === prevKey()) { e.preventDefault(); showSlide(deckState.i - 1); }
 });
 {
   let sx0 = null, sy0 = null;
@@ -1189,9 +1218,27 @@ deck.addEventListener('keydown', (e) => {
     if (sx0 === null) return;
     const dx = e.changedTouches[0].clientX - sx0, dy = e.changedTouches[0].clientY - sy0;
     sx0 = null;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4) showSlide(deckState.i + (dx > 0 ? 1 : -1));
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4) showSlide(deckState.i + ((dx > 0) === isRTL() ? 1 : -1));
   });
 }
+
+/* ═════════════ QR code ═════════════ */
+const SITE_URL = 'https://royborkin.github.io/IUIMap/';
+const qrDlg = $('#qrDialog');
+let qrOpener = null;
+$('#qrBtn').addEventListener('click', (e) => {
+  qrOpener = e.currentTarget;
+  if (!$('#qrCode').firstChild) $('#qrCode').innerHTML = qrSVG(SITE_URL);
+  $('#qrCode svg').setAttribute('aria-label', SITE_URL);
+  $('#qrCopy').textContent = t('qrCopy');
+  qrDlg.showModal();
+});
+$('#qrClose').addEventListener('click', () => qrDlg.close());
+qrDlg.addEventListener('click', (e) => { if (e.target === qrDlg) qrDlg.close(); });
+qrDlg.addEventListener('close', () => qrOpener?.focus());
+$('#qrCopy').addEventListener('click', async (e) => {
+  try { await navigator.clipboard.writeText(SITE_URL); e.target.textContent = t('qrCopied'); } catch {}
+});
 
 /* lightbox with previous / next */
 const lb = $('#lightbox');
@@ -1201,8 +1248,8 @@ function showPhoto(k) {
   lbSet.i = (k + list.length) % list.length;
   const ph = list[lbSet.i];
   $('#lbImg').src = ph.src;
-  $('#lbImg').alt = ph.caption || `${name}, תמונה ${lbSet.i + 1}`;
-  $('#lbCap').textContent = `${ph.caption ? ph.caption + '. ' : ''}${name}, ${lbSet.i + 1} מתוך ${list.length}`;
+  $('#lbImg').alt = ph.caption || t('photoAlt', name, lbSet.i + 1);
+  $('#lbCap').textContent = `${ph.caption ? ph.caption + '. ' : ''}${t('photoOf', name, lbSet.i + 1, list.length)}`;
   $('#lbPrev').hidden = $('#lbNext').hidden = list.length < 2;
 }
 function openPhoto(list, i = 0, name = '') {
@@ -1216,8 +1263,8 @@ $('#lbPrev').addEventListener('click', () => showPhoto(lbSet.i - 1));
 $('#lbNext').addEventListener('click', () => showPhoto(lbSet.i + 1));
 lb.addEventListener('click', (e) => { if (e.target === lb) lb.close(); });
 lb.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowLeft') { e.preventDefault(); showPhoto(lbSet.i + 1); }
-  if (e.key === 'ArrowRight') { e.preventDefault(); showPhoto(lbSet.i - 1); }
+  if (e.key === nextKey()) { e.preventDefault(); showPhoto(lbSet.i + 1); }
+  if (e.key === prevKey()) { e.preventDefault(); showPhoto(lbSet.i - 1); }
 });
 {
   let x0 = null;
@@ -1225,7 +1272,7 @@ lb.addEventListener('keydown', (e) => {
   lb.addEventListener('touchend', (e) => {
     if (x0 === null) return;
     const dx = e.changedTouches[0].clientX - x0; x0 = null;
-    if (Math.abs(dx) > 50) showPhoto(lbSet.i + (dx > 0 ? 1 : -1));
+    if (Math.abs(dx) > 50) showPhoto(lbSet.i + ((dx > 0) === isRTL() ? 1 : -1));
   });
 }
 
@@ -1233,6 +1280,43 @@ lb.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !deck.open && !lb.open) closePanel();
 });
+
+/* ═════════════ language ═════════════ */
+function applyLang() {
+  const html = document.documentElement;
+  html.lang = LANG;
+  html.dir = isRTL() ? 'rtl' : 'ltr';
+  document.title = t('docTitle');
+  document.querySelectorAll('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n)));
+  document.querySelectorAll('[data-i18n-aria]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => (el.title = t(el.dataset.i18nTitle)));
+  $('#langToggle').lang = isRTL() ? 'en' : 'he';
+  const meta = $('#meta');
+  meta.textContent = t('meta', POINTS.length, meta.dataset.a, meta.dataset.b, EX);
+  chipsEl.querySelectorAll('.chip').forEach((b) => {
+    b.textContent = `${b.dataset.d} ${t('m')}`;
+    b.setAttribute('aria-label', t('sliceAria', b.dataset.d));
+  });
+  syncThemeButton();
+  fillLabels();
+  measureLabels();
+  Object.entries(mapMarkers).forEach(([id, m]) => m.setTooltipContent(nm(byId[id])));
+  lastScale = '';
+  $('#qrCopy').textContent = t('qrCopy');
+  if (deck.open && deckState) showSlide(deckState.i);
+  if (selected) {
+    renderPanel(selected);
+    const o = panelOffset(true);
+    viewOff.tx = o.x; viewOff.ty = o.y;
+    fly(controls.target.clone(), camera.position.clone(), 500);
+  }
+}
+$('#langToggle').addEventListener('click', () => {
+  LANG = isRTL() ? 'en' : 'he';
+  try { localStorage.setItem('iui-lang', LANG); } catch {}
+  applyLang();
+});
+applyLang();
 
 /* ═════════════ boot ═════════════ */
 resize();
