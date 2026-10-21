@@ -346,77 +346,89 @@ export function buildObject(kit, p) {
 /* ═════════════ the pier ═════════════
    built directly in world space: it has to reach from the seabed
    (vertically exaggerated) up to the deck, which sits at true height. */
-export function buildPier(kit, { head, shoreE, yAt, W, EX }) {
+export function buildPier(kit, { head, bearing, headSize, walkWidth, seaDist, yAt, W }) {
   const b = new Builder(kit);
   const r = rng(99);
   const DECK = 1.3, DECK_T = 0.35;
-  const HW = 7, HL = 9; // head: east-west 7 m, north-south 9 m
-  const he = head.e, hn = head.n;
-  const walkW = 2.6;
-  const walkStart = he - HW / 2;
-  const walkEnd = shoreE(hn) - 5;
+  // pier-local frame: u runs from the head towards the beach, v runs across it
+  const br = (bearing * Math.PI) / 180;
+  const ue = Math.sin(br), un = Math.cos(br);
+  const ve = un, vn = -ue;
+  const at = (u, v) => ({ e: head.e + u * ue + v * ve, n: head.n + u * un + v * vn });
+  const P = (u, v, y) => { const q = at(u, v); return W(q.e, q.n, y); };
+  // rotation that turns a box's local z axis along the walkway
+  const rotY = Math.PI - br;
   const STEEL = '#6A4A35', WHITE = '#E9E7DF', DECKC = '#CFC8B8', TIRE = '#202325';
+  const H = headSize / 2, ww = walkWidth / 2;
 
-  // decks
-  b.box(HW, DECK_T, HL, DECKC, W(he, hn, DECK - DECK_T / 2).toArray());
-  const wl = walkStart - walkEnd;
-  b.box(wl, DECK_T, walkW, DECKC, W((walkStart + walkEnd) / 2, hn, DECK - DECK_T / 2).toArray());
+  // walkway length: from the head edge until 6 m up the beach
+  let len = H;
+  while (len < 160 && seaDist(at(len, 0).e, at(len, 0).n) > -6) len += 0.5;
+
+  // decks (boxes rotated to the walkway direction)
+  const deckBox = (u0, u1, halfW) => {
+    const c = at((u0 + u1) / 2, 0);
+    b.box(halfW * 2, DECK_T, u1 - u0, DECKC, W(c.e, c.n, DECK - DECK_T / 2).toArray(), [0, rotY, 0]);
+  };
+  deckBox(-H, H, H);
+  deckBox(H, len, ww);
 
   // lattice piles from the seabed to under the deck
-  const pile = (e, n) => {
-    const yb = Math.min(yAt(e, n), -0.3);
+  const pile = (u, v) => {
+    const q = at(u, v);
+    const yb = Math.min(yAt(q.e, q.n), -0.3);
     const top = DECK - DECK_T;
-    if (top - yb < 0.6) return;
+    if (seaDist(q.e, q.n) < 0.5 || top - yb < 0.6) return;
     const c = 0.28;
     const corners = [[-c, -c], [c, -c], [c, c], [-c, c]];
-    corners.forEach(([x, z]) => b.rod(W(e + x, n + z, yb - 0.4), W(e + x, n + z, top), 0.05, STEEL));
+    corners.forEach(([du, dv]) => b.rod(P(u + du, v + dv, yb - 0.4), P(u + du, v + dv, top), 0.05, STEEL));
     const levels = Math.max(2, Math.round((top - yb) / 1.6));
     for (let k = 0; k < levels; k++) {
       const y0 = yb + ((top - yb) * k) / levels, y1 = yb + ((top - yb) * (k + 1)) / levels;
       for (let i = 0; i < 4; i++) {
-        const [ax, az] = corners[i], [bx, bz] = corners[(i + 1) % 4];
-        b.rod(W(e + ax, n + az, y0), W(e + bx, n + bz, y1), 0.025, STEEL);
+        const [au, av] = corners[i], [bu, bv] = corners[(i + 1) % 4];
+        b.rod(P(u + au, v + av, y0), P(u + bu, v + bv, y1), 0.025, STEEL);
       }
     }
-    // the triangular foot struts seen in the photos
-    b.rod(W(e + c, n, yb + (top - yb) * 0.45), W(e + c + 2.2, n, yb + 0.1), 0.045, STEEL);
-    b.rod(W(e + c + 2.2, n, yb + 0.1), W(e + c, n, yb + 0.1), 0.045, STEEL);
+    // triangular foot struts, as in the underwater photos
+    b.rod(P(u, v + c, yb + (top - yb) * 0.45), P(u, v + c + 2.2, yb + 0.1), 0.045, STEEL);
+    b.rod(P(u, v + c + 2.2, yb + 0.1), P(u, v + c, yb + 0.1), 0.045, STEEL);
   };
-  [[-1, -1], [1, -1], [-1, 1], [1, 1], [-1, 0], [1, 0]].forEach(([sx, sn]) => pile(he + sx * (HW / 2 - 0.6), hn + sn * (HL / 2 - 0.6)));
-  for (let e = walkStart - 4; e > walkEnd + 2; e -= 9) { pile(e, hn - walkW / 2 + 0.3); pile(e, hn + walkW / 2 - 0.3); }
+  [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1]].forEach(([su, sv]) => pile(su * (H - 0.6), sv * (H - 0.6)));
+  for (let u = H + 4; u < len - 2; u += 8) { pile(u, -ww + 0.3); pile(u, ww - 0.3); }
 
   // pipes lying on the seabed under the head
   for (let i = 0; i < 4; i++) {
-    const n0 = hn - 3 + i * 2 + (r() - 0.5);
-    const e0 = he - 6 + r() * 2, e1 = he + 4 + r() * 3;
-    b.rod(W(e0, n0, yAt(e0, n0) + 0.12), W(e1, n0 + (r() - 0.5) * 2, yAt(e1, n0) + 0.12), 0.12, RUST_DARK);
+    const v0 = -3 + i * 2 + (r() - 0.5);
+    const a = at(-6 - r() * 3, v0), c = at(4 + r() * 2, v0 + (r() - 0.5) * 2);
+    b.rod(W(a.e, a.n, yAt(a.e, a.n) + 0.12), W(c.e, c.n, yAt(c.e, c.n) + 0.12), 0.12, RUST_DARK);
   }
 
-  // fender tires on the three sea-facing sides
+  // fender tyres on the three sea-facing sides
   const torus = new THREE.TorusGeometry(0.42, 0.16, 8, 16);
-  for (let k = -HL / 2 + 0.9; k <= HL / 2 - 0.8; k += 1.6) b.geo(torus, TIRE, W(he + HW / 2 + 0.2, hn + k, DECK - 0.75).toArray(), [0, Math.PI / 2, 0]);
-  for (let k = -HW / 2 + 0.9; k <= HW / 2 - 0.8; k += 1.6) {
-    b.geo(torus, TIRE, W(he + k, hn + HL / 2 + 0.2, DECK - 0.75).toArray());
-    b.geo(torus, TIRE, W(he + k, hn - HL / 2 - 0.2, DECK - 0.75).toArray());
+  for (let k = -H + 0.9; k <= H - 0.8; k += 1.6) {
+    b.geo(torus, TIRE, P(-H - 0.2, k, DECK - 0.75).toArray(), [0, rotY, 0]);
+    b.geo(torus, TIRE, P(k, H + 0.2, DECK - 0.75).toArray(), [0, rotY + Math.PI / 2, 0]);
+    b.geo(torus, TIRE, P(k, -H - 0.2, DECK - 0.75).toArray(), [0, rotY + Math.PI / 2, 0]);
   }
 
   // white railing
   const rail = (a, c) => {
-    const len = a.distanceTo(c), n = Math.max(1, Math.round(len / 1.5));
+    const n = Math.max(1, Math.round(a.distanceTo(c) / 1.5));
     for (let i = 0; i <= n; i++) { const p = a.clone().lerp(c, i / n); b.rod(p, p.clone().add(V(0, 1.0, 0)), 0.03, WHITE); }
     b.rod(a.clone().add(V(0, 1.0, 0)), c.clone().add(V(0, 1.0, 0)), 0.035, WHITE);
     b.rod(a.clone().add(V(0, 0.5, 0)), c.clone().add(V(0, 0.5, 0)), 0.025, WHITE);
   };
-  const ex = he + HW / 2 - 0.1, wx = he - HW / 2 + 0.1, nn = hn + HL / 2 - 0.1, sn = hn - HL / 2 + 0.1;
-  rail(W(ex, sn, DECK), W(ex, nn, DECK));
-  rail(W(wx, nn, DECK), W(ex, nn, DECK));
-  rail(W(wx, sn, DECK), W(ex, sn, DECK));
-  rail(W(walkEnd + 1, hn + walkW / 2 - 0.1, DECK), W(wx, hn + walkW / 2 - 0.1, DECK));
-  rail(W(walkEnd + 1, hn - walkW / 2 + 0.1, DECK), W(wx, hn - walkW / 2 + 0.1, DECK));
+  const e = H - 0.1;
+  rail(P(-e, -e, DECK), P(-e, e, DECK));
+  rail(P(-e, e, DECK), P(e, e, DECK));
+  rail(P(-e, -e, DECK), P(e, -e, DECK));
+  rail(P(H, ww - 0.1, DECK), P(len - 1, ww - 0.1, DECK));
+  rail(P(H, -ww + 0.1, DECK), P(len - 1, -ww + 0.1, DECK));
 
-  // instrument hut and the meteorological mast
-  b.box(2.2, 1.6, 1.6, WHITE, W(he + 1.6, hn + 2.6, DECK + 0.8).toArray());
-  const mb = W(he + 0.6, hn - 1.2, DECK);
+  // instrument hut and the weather mast
+  b.box(2.2, 1.6, 1.6, WHITE, P(1.2, 2.2, DECK + 0.8).toArray(), [0, rotY, 0]);
+  const mb = P(-1.5, -1.6, DECK);
   const tri = [0, 1, 2].map((i) => V(Math.cos((i * 2 * Math.PI) / 3) * 0.28, 0, Math.sin((i * 2 * Math.PI) / 3) * 0.28));
   const MH = 10;
   tri.forEach((t) => b.rod(mb.clone().add(t), mb.clone().add(t).add(V(0, MH, 0)), 0.035, WHITE));

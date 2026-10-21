@@ -3,7 +3,7 @@ import { MapControls } from 'three/addons/controls/MapControls.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
-import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID } from './data.js';
+import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID, SHORELINE, PIER } from './data.js';
 import { UI } from './i18n.js';
 import { qrSVG } from './qr.js';
 import { Kit, buildObject, buildPier, buildScatter } from './models.js';
@@ -86,48 +86,65 @@ const distBetween = (a, b) => Math.hypot(b.e - a.e, b.n - a.n);
 /* ═════════════ seabed model ═════════════
    A plane fitted to the measured depths, plus a gaussian-weighted
    correction so the surface passes close to every measured point. */
-// Coastline: west of the points, running north–south and bending west north of the pier,
-// as in the satellite photo. Its exact position is an estimate.
-const nPier = byId.pier.n;
-const shoreE = (n) => Math.min(...POINTS.map((p) => p.e)) - 17 - Math.max(0, n - nPier - 6) * 0.35;
-const seaDist = (e, n) => e - shoreE(n);
+/* ═════════════ coastline (traced from the satellite image) ═════════════ */
+const SHORE = SHORELINE.map(([lat, lon]) => toLocal(lat, lon));
+{
+  // extend both ends of the traced waterline so distances are defined across the whole block
+  const stretch = (p, q) => { const d = Math.hypot(p.e - q.e, p.n - q.n) || 1; return { e: p.e + ((p.e - q.e) / d) * 400, n: p.n + ((p.n - q.n) / d) * 400 }; };
+  SHORE.unshift(stretch(SHORE[0], SHORE[3]));
+  SHORE.push(stretch(SHORE[SHORE.length - 1], SHORE[SHORE.length - 4]));
+}
+// signed distance to the waterline in metres: positive at sea (east of the line), negative on the beach
+function seaDist(e, n) {
+  let best = Infinity, sign = 1;
+  for (let k = 0; k < SHORE.length - 1; k++) {
+    const a = SHORE[k], b = SHORE[k + 1];
+    const de = b.e - a.e, dn = b.n - a.n, L2 = de * de + dn * dn;
+    const t = clamp(((e - a.e) * de + (n - a.n) * dn) / L2, 0, 1);
+    const pe = a.e + de * t, pn = a.n + dn * t;
+    const d = Math.hypot(e - pe, n - pn);
+    if (d < best) { best = d; sign = (e - pe) * -dn + (n - pn) * de >= 0 ? 1 : -1; }
+  }
+  return best * sign;
+}
+POINTS.forEach((p) => (p.s = seaDist(p.e, p.n)));
+
+/* ═════════════ seabed model ═════════════
+   A shallow shelf that reaches about 5–6 m, then a slope down to the deep water,
+   both measured from the waterline. The drop-off distance and the slope are fitted
+   to the measured depths, and a local correction makes the surface pass through
+   every measured point. */
+const SHELF = 5.5;
+const profile = (s, sA, m) => SHELF * Math.tanh((1.7 * s) / sA) + m * 3 * Math.log1p(Math.exp((s - sA) / 3));
+const fit = (() => {
+  const pts = POINTS.filter((p) => p.hasDepth);
+  let best = { err: Infinity };
+  for (let sA = 8; sA <= 90; sA += 1) for (let m = 0.05; m <= 0.8; m += 0.01) {
+    const err = pts.reduce((a, p) => a + (profile(p.s, sA, m) - p.depthMid) ** 2, 0);
+    if (err < best.err) best = { err, sA, m };
+  }
+  return best;
+})();
 const seabedModel = (() => {
-  const pts = POINTS.filter((p) => p.hasDepth).map((p) => [p.e, p.n, p.depthMid]);
-  const ns = POINTS.map((p) => p.n);
-  for (let n = Math.min(...ns) - 60; n <= Math.max(...ns) + 60; n += 10) pts.push([shoreE(n) + 6, n, 1.2]);
-  // least squares d = a + b e + c n
-  let S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], v = [0, 0, 0];
-  pts.forEach(([e, n, d]) => {
-    const r = [1, e, n];
-    for (let i = 0; i < 3; i++) { v[i] += r[i] * d; for (let j = 0; j < 3; j++) S[i][j] += r[i] * r[j]; }
-  });
-  const det3 = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-  const D = det3(S);
-  const coef = [0, 1, 2].map((k) => det3(S.map((row, i) => row.map((x, j) => (j === k ? v[i] : x)))) / D);
-  const plane = (e, n) => coef[0] + coef[1] * e + coef[2] * n;
-  const res = pts.map(([e, n, d]) => [e, n, d - plane(e, n)]);
-  const sig2 = 2 * 13 * 13;
-  return (e, n) => {
+  const res = POINTS.filter((p) => p.hasDepth).map((p) => [p.e, p.n, p.depthMid - profile(p.s, fit.sA, fit.m)]);
+  // inverse-distance weights: exact at each point, fading to the fitted profile ~15 m away
+  return (e, n, s) => {
     let ws = 0, wr = 0;
     for (const [pe, pn, r] of res) {
-      const w = Math.exp(-((e - pe) ** 2 + (n - pn) ** 2) / sig2);
+      const d2 = (e - pe) ** 2 + (n - pn) ** 2;
+      const w = Math.exp(-d2 / (2 * 11 * 11)) / (d2 + 0.6) ** 1.5;
       ws += w; wr += w * r;
     }
-    const noise = 0.22 * Math.sin(e * 0.19 + n * 0.11) + 0.15 * Math.sin(e * 0.07 - n * 0.23 + 1.3) + 0.09 * Math.sin(e * 0.41 + n * 0.37 + 2.1);
-    return clamp(plane(e, n) + wr / (ws + 0.06) + noise * (1 - Math.min(1, ws)), 0.6, 13.5);
+    const noise = 0.12 * Math.sin(e * 0.19 + n * 0.11) + 0.08 * Math.sin(e * 0.07 - n * 0.23 + 1.3) + 0.05 * Math.sin(e * 0.41 + n * 0.37 + 2.1);
+    return profile(s, fit.sA, fit.m) + wr / (ws + 0.0015) + noise * Math.min(1, s / 10);
   };
 })();
 
 // depth in metres (negative on the beach)
 function seabed(e, n) {
   const s = seaDist(e, n);
-  // smooth transition from the beach into the water
-  const shoreline = s * (s > 0 ? 0.55 : 0.075);
-  const land = -1.6 * (1 - Math.exp(s / 18));
-  if (s <= 0) return land;
-  const m = seabedModel(e, n), k = 1.2;
-  const h = clamp(0.5 + (shoreline - m) / (2 * k), 0, 1);
-  return Math.max(0, shoreline * (1 - h) + m * h - k * h * (1 - h));
+  if (s <= 0) return -1.6 * (1 - Math.exp(s / 18));
+  return clamp(seabedModel(e, n, s), 0, 14);
 }
 const yAt = (e, n) => -seabed(e, n) * EX;
 const inSea = (e, n) => seaDist(e, n) > 1.5;
@@ -156,7 +173,7 @@ const ext = (() => {
   const es = POINTS.map((p) => p.e), ns = POINTS.map((p) => p.n);
   const r10 = (v, f) => f(v / 10) * 10;
   return {
-    e0: r10(Math.min(Math.min(...es) - MARGIN, shoreE(Math.max(...ns) + MARGIN) - 20), Math.floor), e1: r10(Math.max(...es) + MARGIN, Math.ceil),
+    e0: r10(Math.min(...es) - MARGIN, Math.floor), e1: r10(Math.max(...es) + MARGIN, Math.ceil),
     n0: r10(Math.min(...ns) - MARGIN, Math.floor), n1: r10(Math.max(...ns) + MARGIN, Math.ceil),
   };
 })();
@@ -416,25 +433,34 @@ POINTS.forEach((p) => {
   if (p.heading) obj.rotation.y = -rad(p.heading);
   scene.add(obj);
 });
-scene.add(buildPier(kit, { head: byId.pier, shoreE, yAt, W, EX }));
+{
+  const head = { e: byId.pier.e + PIER.headOffset[0], n: byId.pier.n + PIER.headOffset[1] };
+  scene.add(buildPier(kit, { head, bearing: PIER.bearing, headSize: PIER.headSize, walkWidth: PIER.walkWidth, seaDist, yAt, W }));
+}
 
 /* ── simulation extras: scattered rocks and coral heads, and the water surface ── */
 let scatter = null;
 const waterMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, side: THREE.DoubleSide,
-  uniforms: { uTime: { value: 0 }, uA: { value: shoreE(-1e4) }, uB: { value: nPier + 6 }, uDark: { value: 0 } },
-  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-  fragmentShader: `varying vec3 vW; uniform float uTime, uA, uB, uDark;
+  uniforms: { uTime: { value: 0 }, uDark: { value: 0 } },
+  vertexShader: `attribute float aSea; varying float vSea; varying vec3 vW;
+    void main(){ vSea = aSea; vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `varying float vSea; varying vec3 vW; uniform float uTime, uDark;
     void main(){
-      float n = -vW.z; float shore = uA - max(0.0, n - uB) * 0.35;
-      if (vW.x < shore) discard;
+      if (vSea < 0.0) discard;
       float r = sin(vW.x * 0.9 + uTime * 1.3) * sin(vW.z * 0.7 - uTime) * 0.5 + 0.5;
       vec3 c = mix(vec3(0.16, 0.55, 0.68), vec3(0.55, 0.85, 0.92), r * 0.35);
-      float edge = smoothstep(0.0, 3.0, vW.x - shore);
+      float edge = smoothstep(0.0, 3.0, vSea);
       gl_FragColor = vec4(c * mix(1.0, 0.6, uDark), mix(0.55, 0.16, edge));
     }`,
 });
-const water = new THREE.Mesh(new THREE.PlaneGeometry(ext.w, ext.h).rotateX(-Math.PI / 2), waterMat);
+const water = (() => {
+  const g = new THREE.PlaneGeometry(ext.w, ext.h, 100, Math.round((100 * ext.h) / ext.w)).rotateX(-Math.PI / 2);
+  const pos = g.attributes.position, sea = new Float32Array(pos.count);
+  for (let k = 0; k < pos.count; k++) sea[k] = seaDist(pos.getX(k) + ext.ce, -pos.getZ(k) + ext.cn);
+  g.setAttribute('aSea', new THREE.BufferAttribute(sea, 1));
+  return new THREE.Mesh(g, waterMat);
+})();
 water.position.set(ext.ce, 0.02, -ext.cn);
 water.renderOrder = 4;
 water.visible = false;
@@ -1336,4 +1362,4 @@ const hashId = decodeURIComponent(location.hash.slice(1));
 if (byId[hashId]) setTimeout(() => select(hashId), 400);
 
 // small debugging handle
-window.__iui = { POINTS, select, resetView, camera, controls };
+window.__iui = { POINTS, select, resetView, camera, controls, fit, seabed };
