@@ -66,11 +66,45 @@ POINTS.forEach((p) => {
     }
   }
 });
+/* ═════════════ coastline (traced from the satellite image) ═════════════ */
+const SHORE = SHORELINE.map(([lat, lon]) => toLocal(lat, lon));
+{
+  // extend both ends of the traced waterline so distances are defined across the whole block
+  const stretch = (p, q) => { const d = Math.hypot(p.e - q.e, p.n - q.n) || 1; return { e: p.e + ((p.e - q.e) / d) * 400, n: p.n + ((p.n - q.n) / d) * 400 }; };
+  SHORE.unshift(stretch(SHORE[0], SHORE[3]));
+  SHORE.push(stretch(SHORE[SHORE.length - 1], SHORE[SHORE.length - 4]));
+}
+// signed distance to the waterline in metres: positive at sea (east of the line), negative on the beach
+function seaDist(e, n) {
+  let best = Infinity, sign = 1;
+  for (let k = 0; k < SHORE.length - 1; k++) {
+    const a = SHORE[k], b = SHORE[k + 1];
+    const de = b.e - a.e, dn = b.n - a.n, L2 = de * de + dn * dn;
+    const t = clamp(((e - a.e) * de + (n - a.n) * dn) / L2, 0, 1);
+    const pe = a.e + de * t, pn = a.n + dn * t;
+    const d = Math.hypot(e - pe, n - pn);
+    if (d < best) { best = d; sign = (e - pe) * -dn + (n - pn) * de >= 0 ? 1 : -1; }
+  }
+  return best * sign;
+}
+// direction of the waterline near a point, in degrees, pointing to whichever side is closer to `toward`
+function shoreBearing(e, n, toward) {
+  let best = Infinity, b = 0;
+  for (let k = 0; k < SHORE.length - 1; k++) {
+    const a = SHORE[k], c = SHORE[k + 1];
+    const mid = Math.hypot(e - (a.e + c.e) / 2, n - (a.n + c.n) / 2);
+    if (mid < best) { best = mid; b = (deg(Math.atan2(c.e - a.e, c.n - a.n)) + 360) % 360; }
+  }
+  const diff = Math.abs(((b - toward + 540) % 360) - 180);
+  return diff > 90 ? (b + 180) % 360 : b;
+}
+
 for (let guard = 0; guard < 6; guard++) {
   POINTS.forEach((p) => {
     if (p.e !== undefined || !p.derive) return;
     const f = byId[p.derive.from];
     if (f.e === undefined) return;
+    if (p.derive.along === 'shore') p.derive.bearing = Math.round(shoreBearing(f.e, f.n, p.derive.toward));
     p.e = f.e + Math.sin(rad(p.derive.bearing)) * p.derive.dist;
     p.n = f.n + Math.cos(rad(p.derive.bearing)) * p.derive.dist;
     const g = toGeo(p.e, p.n);
@@ -93,27 +127,6 @@ const distBetween = (a, b) => Math.hypot(b.e - a.e, b.n - a.n);
 /* ═════════════ seabed model ═════════════
    A plane fitted to the measured depths, plus a gaussian-weighted
    correction so the surface passes close to every measured point. */
-/* ═════════════ coastline (traced from the satellite image) ═════════════ */
-const SHORE = SHORELINE.map(([lat, lon]) => toLocal(lat, lon));
-{
-  // extend both ends of the traced waterline so distances are defined across the whole block
-  const stretch = (p, q) => { const d = Math.hypot(p.e - q.e, p.n - q.n) || 1; return { e: p.e + ((p.e - q.e) / d) * 400, n: p.n + ((p.n - q.n) / d) * 400 }; };
-  SHORE.unshift(stretch(SHORE[0], SHORE[3]));
-  SHORE.push(stretch(SHORE[SHORE.length - 1], SHORE[SHORE.length - 4]));
-}
-// signed distance to the waterline in metres: positive at sea (east of the line), negative on the beach
-function seaDist(e, n) {
-  let best = Infinity, sign = 1;
-  for (let k = 0; k < SHORE.length - 1; k++) {
-    const a = SHORE[k], b = SHORE[k + 1];
-    const de = b.e - a.e, dn = b.n - a.n, L2 = de * de + dn * dn;
-    const t = clamp(((e - a.e) * de + (n - a.n) * dn) / L2, 0, 1);
-    const pe = a.e + de * t, pn = a.n + dn * t;
-    const d = Math.hypot(e - pe, n - pn);
-    if (d < best) { best = d; sign = (e - pe) * -dn + (n - pn) * de >= 0 ? 1 : -1; }
-  }
-  return best * sign;
-}
 POINTS.forEach((p) => (p.s = seaDist(p.e, p.n)));
 
 /* ═════════════ seabed model ═════════════
@@ -147,11 +160,36 @@ const seabedModel = (() => {
   };
 })();
 
+/* level pads under the objects, so they stand on the seabed instead of sinking into the slope */
+POINTS.forEach((p) => {
+  if (p.model !== 'tables3') return;
+  p.heading = shoreBearing(p.e, p.n, 45); // the three tables run along the shore
+  const b = rad(p.heading), gap = p.spacing || 5.5;
+  p.parts = [-1, 0, 1].map((k) => ({ e: p.e + Math.sin(b) * gap * k, n: p.n + Math.cos(b) * gap * k, r: 1.3 }));
+});
+const PADS = [];
+POINTS.forEach((p) => {
+  if (!p.model) return;
+  const parts = p.parts || [{ e: p.e, n: p.n, r: p.dims.length >= 2 ? Math.hypot(p.dims[0], p.dims[1]) / 2 + 0.5 : 1.2 }];
+  parts.forEach((q) => { const s = seaDist(q.e, q.n); PADS.push({ ...q, d: clamp(seabedModel(q.e, q.n, s), 0, 14) }); });
+});
+const smooth01 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
 // depth in metres (negative on the beach)
 function seabed(e, n) {
   const s = seaDist(e, n);
   if (s <= 0) return -1.6 * (1 - Math.exp(s / 18));
-  return clamp(seabedModel(e, n, s), 0, 14);
+  const d = clamp(seabedModel(e, n, s), 0, 14);
+  // nearby pads are blended with each other, so close objects don't fight over the same ground
+  let ws = 0, wd = 0, wmax = 0;
+  for (const q of PADS) {
+    const dist = Math.hypot(e - q.e, n - q.n);
+    if (dist >= q.r + 2) continue;
+    const w = 1 - smooth01(q.r, q.r + 2, dist);
+    const sharp = w ** 3;
+    ws += sharp; wd += sharp * q.d; wmax = Math.max(wmax, w);
+  }
+  return ws > 0 ? d + (wd / ws - d) * wmax : d;
 }
 const yAt = (e, n) => -seabed(e, n) * EX;
 const inSea = (e, n) => seaDist(e, n) > 1.5;
@@ -442,7 +480,7 @@ POINTS.forEach((p) => {
   const obj = buildObject(kit, p);
   if (!obj) return;
   obj.position.copy(W(p.e, p.n, yAt(p.e, p.n)));
-  if (p.heading) obj.rotation.y = -rad(p.heading);
+  if (p.heading != null) obj.rotation.y = Math.atan2(Math.sin(rad(p.heading)), -Math.cos(rad(p.heading)));
   scene.add(obj);
 });
 {

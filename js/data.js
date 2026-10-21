@@ -35,10 +35,10 @@ export const POINTS = [
   },
   {
     id: 'tables3', name: '3 שולחנות',
-    en: {name: "3 tables", terrain: "Gravel", material: "Metal", dimsText: "Three grid tables, each 0.8 m wide, 1.7 m long and 1.2 m high, 5.5 m apart"},
+    en: {name: "3 tables", terrain: "Gravel", material: "Metal", dimsText: "Three grid tables in a row along the shore, each 0.8 m wide, 1.7 m long and 1.2 m high, 5.5 m apart"},
     lat: [29, 30.126], lon: [34, 55.099],
     depth: [8, 10], dims: [0.8, 1.7, 1.2], shape: 'box', spacing: 5.5,
-    dimsText: 'שלושה שולחנות רשת, כל אחד ברוחב 0.8, אורך 1.7 וגובה 1.2 מ׳, במרחק 5.5 מ׳ זה מזה',
+    dimsText: 'שלושה שולחנות רשת בשורה לאורך החוף, כל אחד ברוחב 0.8, אורך 1.7 וגובה 1.2 מ׳, במרחק 5.5 מ׳ זה מזה',
     terrain: 'חצץ', material: 'מתכת',
     photos: photoSet('tables3', 9), model: 'tables3',
   },
@@ -128,11 +128,11 @@ export const POINTS = [
   },
   {
     id: 'cylinder', name: 'גליל ליד המזח',
-    en: {name: "Cylinder by the pier", terrain: "Rocks", note: "30 m to the right of the pier end."},
-    derive: { from: 'pier', bearing: 180, dist: 30, rough: true },
+    en: {name: "Cylinder by the pier", terrain: "Rocks", note: "30 m south-west of the pier, along the shore."},
+    derive: { from: 'pier', along: 'shore', toward: 225, dist: 30 },
     depth: [4], dims: [0.5, 1, 0.5], shape: 'cylinder',
     terrain: 'סלעים', material: '',
-    note: '30 מטר מימין לקצה המזח.',
+    note: '30 מטר מהמזח, דרום־מערבה לאורך החוף.',
     photos: [], model: 'cylinder',
   },
   {
