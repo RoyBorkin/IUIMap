@@ -3,10 +3,10 @@ import { MapControls } from 'three/addons/controls/MapControls.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
-import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID, SHORELINE, PIER } from './data.js';
+import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID, SHORELINE, PIER, BUILDINGS } from './data.js';
 import { UI } from './i18n.js';
 import { qrSVG } from './qr.js';
-import { Kit, buildObject, buildPier, buildScatter } from './models.js';
+import { Kit, buildObject, buildPier, buildScatter, buildBuildings } from './models.js';
 
 THREE.ColorManagement.enabled = false;
 
@@ -57,6 +57,13 @@ POINTS.forEach((p) => {
   if (p.lat) {
     p.latDec = ddm(p.lat); p.lonDec = ddm(p.lon);
     Object.assign(p, toLocal(p.latDec, p.lonDec));
+    if (p.snap) {
+      // keep the measured position for the panel, but draw the point where the satellite image shows the object
+      p.measured = { lat: p.latDec, lon: p.lonDec };
+      p.e += p.snap[0]; p.n += p.snap[1];
+      const g = toGeo(p.e, p.n);
+      p.latDec = g.lat; p.lonDec = g.lon;
+    }
   }
 });
 for (let guard = 0; guard < 6; guard++) {
@@ -169,8 +176,13 @@ function mixAt(e, n) {
 
 /* ═════════════ block extent ═════════════ */
 const MARGIN = 38;
+// beach buildings within 150 m of the pier are part of the model
+const NEAR_BUILDINGS = BUILDINGS.map((b) => ({ ...b, pts: b.ll.map(([lat, lon]) => toLocal(lat, lon)) }))
+  .filter((b) => b.pts.every((q) => Math.hypot(q.e - byId.pier.e, q.n - byId.pier.n) < 150));
 const ext = (() => {
-  const es = POINTS.map((p) => p.e), ns = POINTS.map((p) => p.n);
+  const bs = NEAR_BUILDINGS.flatMap((b) => b.pts);
+  const es = [...POINTS.map((p) => p.e), ...bs.map((q) => q.e + 20)];
+  const ns = [...POINTS.map((p) => p.n), ...bs.map((q) => q.n - 26)];
   const r10 = (v, f) => f(v / 10) * 10;
   return {
     e0: r10(Math.min(...es) - MARGIN, Math.floor), e1: r10(Math.max(...es) + MARGIN, Math.ceil),
@@ -437,6 +449,7 @@ POINTS.forEach((p) => {
   const head = { e: byId.pier.e + PIER.headOffset[0], n: byId.pier.n + PIER.headOffset[1] };
   scene.add(buildPier(kit, { head, bearing: PIER.bearing, headSize: PIER.headSize, walkWidth: PIER.walkWidth, seaDist, yAt, W }));
 }
+scene.add(buildBuildings(kit, NEAR_BUILDINGS, { ext, seaDist, yAt }));
 
 /* ── simulation extras: scattered rocks and coral heads, and the water surface ── */
 let scatter = null;
@@ -769,7 +782,7 @@ function renderPanel(p) {
       <dt>${t('fDims')}</dt><dd>${dimsText(p)}</dd>
       <dt>${t('fTerrain')}</dt><dd>${p.terrain ? esc(tx(p, 'terrain')) : `<span class="muted">${t('notRecorded')}</span>`}</dd>
       <dt>${t('fMaterial')}</dt><dd>${material}</dd>
-      <dt>${t('fCoords')}</dt><dd><div class="coord"><span>${ddmText(p.latDec, true)}</span><span>${ddmText(p.lonDec, false)}</span></div><button type="button" class="copy" id="pCopy">${t('copy')}</button>${est}</dd>
+      <dt>${t('fCoords')}</dt><dd><div class="coord"><span>${ddmText(p.latDec, true)}</span><span>${ddmText(p.lonDec, false)}</span></div><button type="button" class="copy" id="pCopy">${t('copy')}</button>${est}${p.measured ? `<span class="est">${esc(t('snapped', `${ddmText(p.measured.lat, true)} ${ddmText(p.measured.lon, false)}`))}</span>` : ''}</dd>
     </dl>
     ${p.note ? `<p class="p-note">${esc(tx(p, 'note'))}</p>` : ''}
     ${p.model && p.photos.length ? `<p class="p-note">${t('modelPhotos')}</p>` : ''}

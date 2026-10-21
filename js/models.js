@@ -28,20 +28,26 @@ export class Kit {
     this.mode = 'chart';
     this.clay = new THREE.Color('#E6EBE8');
   }
-  mat(hex) {
-    if (!this.mats.has(hex)) {
+  mat(hex, dry = false) {
+    const key = hex + (dry ? ':dry' : '');
+    if (!this.mats.has(key)) {
       const m = new THREE.MeshLambertMaterial({ color: this.clay.clone() });
       m.userData.real = new THREE.Color(hex);
-      this.mats.set(hex, m);
+      m.userData.dry = dry;
+      this.mats.set(key, m);
     }
-    return this.mats.get(hex);
+    return this.mats.get(key);
   }
   setMode(mode, clayColor) {
     this.mode = mode;
     if (clayColor) this.clay.copy(clayColor);
     // underwater the light loses its reds first, so real colors get a slight blue-green cast
     const tint = new THREE.Color(0.82, 0.93, 1.0);
-    this.mats.forEach((m) => (mode === 'sim' ? m.color.copy(m.userData.real).multiply(tint) : m.color.copy(this.clay)));
+    this.mats.forEach((m) => {
+      if (mode !== 'sim') m.color.copy(this.clay);
+      else if (m.userData.dry) m.color.copy(m.userData.real);
+      else m.color.copy(m.userData.real).multiply(tint);
+    });
     this.instanced.forEach((im) => { im.instanceColor = mode === 'sim' ? im.userData.ic : null; });
   }
 }
@@ -441,6 +447,30 @@ export function buildPier(kit, { head, bearing, headSize, walkWidth, seaDist, yA
   b.box(0.3, 0.3, 0.3, '#9EA3A6', mb.clone().add(V(-1.0, MH - 1.2, 0)).toArray());
   b.rod(mb.clone().add(V(0, MH, 0)), mb.clone().add(V(0, MH + 0.8, 0)), 0.02, WHITE);
   return b.build();
+}
+
+/* ═════════════ buildings on the beach ═════════════
+   footprints traced from the satellite image, extruded to an estimated height */
+export function buildBuildings(kit, list, { ext, seaDist, yAt }) {
+  const g = new THREE.Group();
+  const inBlock = (q) => q.e > ext.e0 + 1 && q.e < ext.e1 - 1 && q.n > ext.n0 + 1 && q.n < ext.n1 - 1;
+  list.forEach((b) => {
+    if (!b.pts.every(inBlock) || b.pts.some((q) => seaDist(q.e, q.n) > -2)) return;
+    const shape = new THREE.Shape(b.pts.map((q) => new THREE.Vector2(q.e, q.n)));
+    let area = 0;
+    b.pts.forEach((q, i) => { const r = b.pts[(i + 1) % b.pts.length]; area += q.e * r.n - r.e * q.n; });
+    area = Math.abs(area) / 2;
+    const h = b.h || (area > 350 ? 7.5 : area > 120 ? 5 : 3.5);
+    const ground = Math.max(...b.pts.map((q) => yAt(q.e, q.n)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    const roofHex = b.roof || '#e8e4d8';
+    const wallHex = '#' + new THREE.Color(roofHex).multiplyScalar(0.82).getHexString();
+    const mesh = new THREE.Mesh(geo, [kit.mat(roofHex, true), kit.mat(wallHex, true)]);
+    mesh.position.y = ground - 0.6;
+    g.add(mesh);
+  });
+  return g;
 }
 
 /* ═════════════ scattered seabed: rocks, gravel, rubble, coral heads (simulation only) ═════════════ */
