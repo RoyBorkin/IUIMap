@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>מפת הקרקעית – חוף המכון הבין־אוניברסיטאי</title>
+  <meta name="description" content="מפה תלת־ממדית של העצמים מתחת למים בחוף המכון הבין־אוניברסיטאי באילת, עם חתכי עומק של 3, 6 ו־9 מטר.">
+  <meta name="theme-color" content="#F4F7F6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#08141F" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M7 7l18 18M25 7L7 25' stroke='%23B4247E' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // theme before paint
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('iui-theme'); } catch (e) {}
+      if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <main class="stage" id="stage" aria-label="מפה תלת־ממדית של הקרקעית">
+      <canvas id="scene"></canvas>
+      <div class="labels" id="labels"></div>
+    </main>
+
+    <header class="cartouche">
+      <h1><span class="c-title">מפת הקרקעית</span><span class="c-place">חוף המכון הבין־אוניברסיטאי, אילת</span></h1>
+      <p class="c-meta" id="meta"></p>
+    </header>
+
+    <nav class="toolbar" aria-label="תצוגות">
+      <button class="tb" type="button" data-deck="divers" aria-label="צוות הצלילה">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/><path d="M3.5 5.5l17 13"/></svg>
+        <span>צוות הצלילה</span>
+      </button>
+      <button class="tb" type="button" data-deck="snorkel" aria-label="צוות המשקיפים">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3v11a5 5 0 0 1-10 0v-1"/><path d="M13 3h4"/><circle cx="5" cy="11" r="1.6"/></svg>
+        <span>צוות המשקיפים</span>
+      </button>
+      <button class="tb" type="button" data-deck="plan" aria-label="תכנון המשימה">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.5" r="1.8"/><path d="M11 6.2L5.5 20.5M13 6.2l5.5 14.3M7.6 15h8.8"/></svg>
+        <span>תכנון המשימה</span>
+      </button>
+      <button class="tb tb-map" type="button" id="mapToggle" aria-label="מפת לוויין" aria-expanded="false" aria-controls="inset">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>
+        <span>מפת לוויין</span>
+      </button>
+      <button class="tb tb-theme" type="button" id="themeToggle" aria-label="מעבר לתצוגה כהה">
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+        <span class="tb-theme-label">תצוגה כהה</span>
+      </button>
+    </nav>
+
+    <div class="dock">
+    <section class="depths" aria-label="חתכי עומק">
+      <p class="depths-title">חתכי עומק</p>
+      <div class="depth-chips" id="depthChips"></div>
+      <ol class="legend" aria-label="גווני עומק">
+        <li><i style="background:var(--t1)"></i>0–3</li>
+        <li><i style="background:var(--t2)"></i>3–6</li>
+        <li><i style="background:var(--t3)"></i>6–9</li>
+        <li><i style="background:var(--t4)"></i>9+ מ׳</li>
+      </ol>
+    </section>
+
+    <div class="nav-widgets">
+      <div class="scalebar" aria-hidden="true"><span class="scalebar-bar" id="scaleBar"></span><span id="scaleText">20 מ׳</span></div>
+      <button class="compass" id="compass" type="button" aria-label="חזרה למבט על, צפון למעלה" title="מבט על">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <g id="compassRose">
+            <circle cx="32" cy="32" r="27" class="cr-ring"/>
+            <circle cx="32" cy="32" r="21" class="cr-ring cr-thin"/>
+            <path d="M32 6L36 32 32 58 28 32z" class="cr-needle"/>
+            <path d="M32 6L36 32H28z" class="cr-north"/>
+            <path d="M6 32L32 29 58 32 32 35z" class="cr-needle cr-thin"/>
+            <text x="32" y="4.5" text-anchor="middle" class="cr-n">N</text>
+          </g>
+        </svg>
+      </button>
+    </div>
+    </div>
+
+    <aside class="inset" id="inset" aria-label="מפת לוויין לניווט מהיר">
+      <div class="inset-head">
+        <p>מפת לוויין</p>
+        <button type="button" class="icon-btn" id="insetClose" aria-label="סגירת מפת הלוויין">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="inset-map" id="insetMap" dir="ltr"></div>
+      <p class="inset-hint">לחיצה על X מעבירה את התלת־ממד לנקודה</p>
+    </aside>
+
+    <aside class="panel" id="panel" aria-labelledby="pTitle" hidden>
+      <div class="panel-grip" aria-hidden="true"></div>
+      <div class="panel-scroll" id="panelBody"></div>
+    </aside>
+  </div>
+
+  <dialog class="deck" id="deck" aria-labelledby="deckSlideTitle">
+    <div class="deck-frame">
+      <header class="deck-head">
+        <p class="deck-name" id="deckName"></p>
+        <button type="button" class="icon-btn" id="deckClose" aria-label="סגירת השקופיות">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="deck-body" id="deckBody"></div>
+      <footer class="deck-foot">
+        <button type="button" class="btn" id="deckPrev">הקודמת</button>
+        <p class="deck-count" id="deckCount" aria-live="polite"></p>
+        <button type="button" class="btn" id="deckNext">הבאה</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <dialog class="lightbox" id="lightbox" aria-label="תמונה מוגדלת">
+    <button type="button" class="icon-btn lb-close" id="lbClose" aria-label="סגירה">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <figure><img id="lbImg" alt=""><figcaption id="lbCap"></figcaption></figure>
+  </dialog>
+
+  <noscript><p class="noscript">כדי לראות את המפה צריך להפעיל JavaScript.</p></noscript>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
