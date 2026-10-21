@@ -14,6 +14,8 @@
   --t4: #F1F7F8;
   --glass: rgba(244, 247, 246, .9);
   --focus: #B4247E;
+  --clay: #E3E8E5;
+  --sim-bg: #F4F7F6;
 
   --serif: 'Frank Ruhl Libre', 'David Libre', 'Times New Roman', serif;
   --sans: 'IBM Plex Sans Hebrew', 'Segoe UI', Arial, sans-serif;
@@ -45,6 +47,8 @@
   --t4: #0C2332;
   --glass: rgba(8, 20, 31, .88);
   --focus: #E874BD;
+  --clay: #5F7787;
+  --sim-bg: #08141F;
   color-scheme: dark;
 }
 
@@ -155,6 +159,12 @@ svg { display: block; }
   cursor: pointer; flex: none;
 }
 @media (hover: hover) { .icon-btn:hover { background: var(--paper-2); } }
+
+/* simulation switch */
+.sw { position: relative; width: 30px; height: 18px; border: 1.5px solid currentColor; border-radius: 9px; flex: none; }
+.sw-dot { position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: currentColor; transition: transform .2s var(--ease-out); }
+.tb-sim[aria-checked="true"] { background: var(--ink); color: var(--paper); }
+.tb-sim[aria-checked="true"] .sw-dot { transform: translateX(-12px); }
 
 /* ───────── bottom dock: depth slices + compass ───────── */
 .dock {
@@ -271,6 +281,7 @@ svg { display: block; }
 .gallery { display: grid; grid-auto-flow: column; grid-auto-columns: 86%; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; }
 .gallery button { padding: 0; border: 1px solid var(--rule); background: var(--paper-2); scroll-snap-align: start; cursor: zoom-in; }
 .gallery img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.gallery-count { margin: 6px 0 0; font-size: var(--s-1); color: var(--ink-2); }
 .sketch { border: 1px solid var(--rule); background: var(--paper-2); padding: 10px 12px 8px; }
 .sketch svg { width: 100%; height: auto; max-height: 190px; }
 .sketch svg .sk { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-linejoin: round; }
@@ -377,6 +388,12 @@ dialog { color: var(--ink); }
 .bands li { padding: 3px 0; }
 .bands .none { color: var(--ink-2); }
 
+.slide-photo { grid-template-columns: 1.15fr 1fr; align-items: center; }
+.slide-fig { margin: 0; }
+.slide-fig img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); }
+.slide-fig-wide img { width: auto; max-width: 100%; max-height: min(460px, 58dvh); }
+.slide-fig figcaption { margin-top: 8px; font-size: var(--s0); color: var(--ink-2); }
+
 /* lightbox */
 .lightbox { padding: 0; border: 0; background: transparent; max-width: 94vw; max-height: 94vh; }
 .lightbox::backdrop { background: rgba(8, 20, 31, .85); }
@@ -384,6 +401,10 @@ dialog { color: var(--ink); }
 .lightbox img { display: block; max-width: 94vw; max-height: 86vh; }
 .lightbox figcaption { padding: 8px 0; color: #fff; font-size: var(--s0); }
 .lb-close { position: absolute; top: 8px; inset-inline-end: 8px; background: rgba(0,0,0,.5); color: #fff; }
+.lb-nav { position: absolute; top: calc(50% - 40px); width: 48px; height: 48px; background: rgba(0,0,0,.45); color: #fff; }
+.lb-nav[hidden] { display: none; }
+.lb-prev { right: 8px; }
+.lb-next { left: 8px; }
 
 .noscript { position: fixed; inset: auto 16px 16px; padding: 12px; background: var(--paper); border: 1px solid var(--ink); }
 
@@ -392,7 +413,7 @@ dialog { color: var(--ink); }
 .inset.is-open { display: block; }
 @media (max-width: 1180px) {
   .toolbar { max-width: calc(100vw - 400px); }
-  .tb span { display: none; }
+  .tb > span:not(.sw) { display: none; }
   .tb { padding: 0 10px; }
 }
 
@@ -406,7 +427,7 @@ dialog { color: var(--ink); }
 
   .toolbar {
     top: auto; bottom: 0; inset-inline: 0; max-width: none;
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
     padding: 6px 6px max(6px, env(safe-area-inset-bottom));
     background: var(--paper);
     border-top: 1px solid var(--ink);
@@ -418,7 +439,9 @@ dialog { color: var(--ink); }
     font-size: 11px; line-height: 1.2; text-align: center;
   }
   .tb[aria-expanded="true"] { background: var(--paper-2); color: var(--ink); }
-  .tb span { display: block; }
+  .tb span, .tb > span:not(.sw) { display: block; }
+  .tb .sw { display: block; }
+  .tb-sim[aria-checked="true"] { background: var(--paper-2); color: var(--ink); }
   .panel-open .cartouche, .panel-open .tb-theme { display: none; }
   .tb-theme {
     position: fixed; top: max(var(--gut), env(safe-area-inset-top)); left: var(--gut);

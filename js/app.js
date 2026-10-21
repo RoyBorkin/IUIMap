@@ -4,6 +4,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID } from './data.js';
+import { Kit, buildObject, buildPier, buildScatter } from './models.js';
 
 THREE.ColorManagement.enabled = false;
 
@@ -34,9 +35,10 @@ const byId = Object.fromEntries(POINTS.map((p) => [p.id, p]));
 const MAIN = [ROUTE[0].from, ...ROUTE.map((l) => l.to)];
 
 POINTS.forEach((p) => {
-  p.depthMid = avg(p.depth);
-  p.depthMax = Math.max(...p.depth);
-  p.depthText = num(p.depth.length > 1 ? `${p.depth[0]}–${p.depth[1]}` : `${p.depth[0]}`);
+  p.hasDepth = p.depth.length > 0;
+  p.depthMid = p.hasDepth ? avg(p.depth) : null;
+  p.depthMax = p.hasDepth ? Math.max(...p.depth) : null;
+  p.depthText = p.hasDepth ? num(p.depth.length > 1 ? `${p.depth[0]}–${p.depth[1]}` : `${p.depth[0]}`) : 'לא נמדד';
   p.station = MAIN.indexOf(p.id) + 1;
   if (p.lat) {
     p.latDec = ddm(p.lat); p.lonDec = ddm(p.lon);
@@ -70,8 +72,15 @@ const distBetween = (a, b) => Math.hypot(b.e - a.e, b.n - a.n);
 /* ═════════════ seabed model ═════════════
    A plane fitted to the measured depths, plus a gaussian-weighted
    correction so the surface passes close to every measured point. */
-const seabed = (() => {
-  const pts = POINTS.map((p) => [p.e, p.n, p.depthMid]);
+// Coastline: west of the points, running north–south and bending west north of the pier,
+// as in the satellite photo. Its exact position is an estimate.
+const nPier = byId.pier.n;
+const shoreE = (n) => Math.min(...POINTS.map((p) => p.e)) - 17 - Math.max(0, n - nPier - 6) * 0.35;
+const seaDist = (e, n) => e - shoreE(n);
+const seabedModel = (() => {
+  const pts = POINTS.filter((p) => p.hasDepth).map((p) => [p.e, p.n, p.depthMid]);
+  const ns = POINTS.map((p) => p.n);
+  for (let n = Math.min(...ns) - 60; n <= Math.max(...ns) + 60; n += 10) pts.push([shoreE(n) + 6, n, 1.2]);
   // least squares d = a + b e + c n
   let S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], v = [0, 0, 0];
   pts.forEach(([e, n, d]) => {
@@ -95,7 +104,37 @@ const seabed = (() => {
   };
 })();
 
+// depth in metres (negative on the beach)
+function seabed(e, n) {
+  const s = seaDist(e, n);
+  // smooth transition from the beach into the water
+  const shoreline = s * (s > 0 ? 0.55 : 0.075);
+  const land = -1.6 * (1 - Math.exp(s / 18));
+  if (s <= 0) return land;
+  const m = seabedModel(e, n), k = 1.2;
+  const h = clamp(0.5 + (shoreline - m) / (2 * k), 0, 1);
+  return Math.max(0, shoreline * (1 - h) + m * h - k * h * (1 - h));
+}
 const yAt = (e, n) => -seabed(e, n) * EX;
+const inSea = (e, n) => seaDist(e, n) > 1.5;
+
+/* bottom types from the survey table, spread around each point */
+const TYPE_WORDS = { gravel: ['חצץ', 'אבנים'], rubble: ['דרדרת'], rocks: ['סלע'], reef: ['שונית'], sand: ['חול'] };
+POINTS.forEach((p) => {
+  p.types = Object.keys(TYPE_WORDS).filter((k) => TYPE_WORDS[k].some((w) => (p.terrain || '').includes(w)));
+});
+function mixAt(e, n) {
+  const acc = { gravel: 0, rubble: 0, rocks: 0, reef: 0, sand: 0.35 };
+  for (const p of POINTS) {
+    if (!p.types.length) continue;
+    const g = Math.exp(-((e - p.e) ** 2 + (n - p.n) ** 2) / (2 * 15 * 15));
+    p.types.forEach((t) => (acc[t] += g / p.types.length));
+  }
+  const s = seaDist(e, n);
+  if (s < 14) acc.sand += (14 - Math.max(0, s)) / 6;
+  const tot = acc.gravel + acc.rubble + acc.rocks + acc.reef + acc.sand;
+  return { gravel: acc.gravel / tot, rubble: acc.rubble / tot, rocks: acc.rocks / tot, reef: acc.reef / tot };
+}
 
 /* ═════════════ block extent ═════════════ */
 const MARGIN = 38;
@@ -103,7 +142,7 @@ const ext = (() => {
   const es = POINTS.map((p) => p.e), ns = POINTS.map((p) => p.n);
   const r10 = (v, f) => f(v / 10) * 10;
   return {
-    e0: r10(Math.min(...es) - MARGIN, Math.floor), e1: r10(Math.max(...es) + MARGIN, Math.ceil),
+    e0: r10(Math.min(Math.min(...es) - MARGIN, shoreE(Math.max(...ns) + MARGIN) - 20), Math.floor), e1: r10(Math.max(...es) + MARGIN, Math.ceil),
     n0: r10(Math.min(...ns) - MARGIN, Math.floor), n1: r10(Math.max(...ns) + MARGIN, Math.ceil),
   };
 })();
@@ -119,7 +158,8 @@ function readTheme() {
   const c = (n) => new THREE.Color(cs.getPropertyValue(n).trim());
   return {
     paper: c('--paper'), ink: c('--ink'), ink2: c('--ink-2'), magenta: c('--magenta'), slice: c('--slice'),
-    t1: c('--t1'), t2: c('--t2'), t3: c('--t3'), t4: c('--t4'),
+    t1: c('--t1'), t2: c('--t2'), t3: c('--t3'), t4: c('--t4'), buff: c('--buff'),
+    clay: c('--clay'), simBg: c('--sim-bg'),
     dark: document.documentElement.dataset.theme === 'dark',
   };
 }
@@ -148,42 +188,92 @@ controls.maxDistance = 650;
 controls.maxPolarAngle = rad(78);
 controls.zoomToCursor = true;
 
-/* ── chart shader ── */
+/* ── chart shader (also renders the realistic simulation when uSim = 1) ── */
 const chartUniforms = () => ({
   uT1: { value: T.t1.clone() }, uT2: { value: T.t2.clone() }, uT3: { value: T.t3.clone() }, uT4: { value: T.t4.clone() },
-  uInk: { value: T.ink.clone() }, uSlice: { value: T.slice.clone() },
+  uInk: { value: T.ink.clone() }, uSlice: { value: T.slice.clone() }, uLand: { value: T.buff.clone() },
   uSlices: { value: new THREE.Vector3(1, 1, 1) },
   uEx: { value: EX }, uWall: { value: 0 }, uDark: { value: T.dark ? 1 : 0 },
+  uSim: { value: 0 }, uTime: { value: 0 },
 });
 const chartVS = /* glsl */`
-  varying float vD; varying vec3 vN;
+  attribute vec4 aMix;
+  varying float vD; varying vec3 vN; varying vec3 vW; varying vec4 vMix;
   uniform float uEx;
   void main(){
     vec4 w = modelMatrix * vec4(position, 1.0);
+    vW = w.xyz;
     vD = -w.y / uEx;
+    vMix = aMix;
     vN = normalize(mat3(modelMatrix) * normal);
     gl_Position = projectionMatrix * viewMatrix * w;
   }`;
 const chartFS = /* glsl */`
-  varying float vD; varying vec3 vN;
-  uniform vec3 uT1, uT2, uT3, uT4, uInk, uSlice, uSlices;
-  uniform float uWall, uDark;
+  varying float vD; varying vec3 vN; varying vec3 vW; varying vec4 vMix;
+  uniform vec3 uT1, uT2, uT3, uT4, uInk, uSlice, uSlices, uLand;
+  uniform float uWall, uDark, uSim, uTime;
   float iso(float v, float k, float px){
     float fw = max(fwidth(v), 1e-4);
     return 1.0 - smoothstep(px * 0.5, px * 0.5 + 1.0, abs(v - k) / fw);
   }
-  void main(){
-    float d = vD;
-    vec3 col = d < 3.0 ? uT1 : d < 6.0 ? uT2 : d < 9.0 ? uT3 : uT4;
-    vec3 L = normalize(vec3(-0.45, 0.82, 0.36));
-    float sh = clamp(dot(normalize(vN), L), 0.0, 1.0);
+  float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  float vnoise(vec2 p){
+    vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+  float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
+  float caustic(vec2 p, float t){
+    vec2 q = p;
+    for (int i = 0; i < 3; i++) q += vec2(sin(q.y * 1.3 + t), cos(q.x * 1.1 - t * 1.2)) * 0.45;
+    float c = abs(sin(q.x * 1.6) + sin(q.y * 1.6)) * 0.5;
+    return pow(1.0 - clamp(c, 0.0, 1.0), 7.0);
+  }
+  vec3 chartColor(float d, float sh){
+    vec3 col = d < 0.0 ? uLand : d < 3.0 ? uT1 : d < 6.0 ? uT2 : d < 9.0 ? uT3 : uT4;
     col *= mix(mix(0.80, 0.62, uDark), 1.03, sh);
     col *= 1.0 - 0.10 * uWall;
     float fw = max(fwidth(d), 1e-4);
     float fine = 1.0 - smoothstep(0.4, 1.4, abs(d - floor(d + 0.5)) / fw);
-    col = mix(col, uInk, fine * mix(0.16, 0.22, uDark));
+    col = mix(col, uInk, fine * mix(0.16, 0.22, uDark) * step(0.0, d));
+    col = mix(col, uInk, iso(d, 0.0, 2.0) * 0.9 * (1.0 - uWall));
+    return col;
+  }
+  vec3 simColor(float d, float sh){
+    vec2 p = vW.xz;
+    float n1 = fbm(p * 0.35), n2 = fbm(p * 2.3);
+    if (uWall > 0.5) {
+      float band = step(0.5, fract(d * 1.2 + n1 * 0.7));
+      return mix(vec3(0.60, 0.53, 0.41), vec3(0.71, 0.63, 0.49), band) * mix(0.72, 1.0, sh) * mix(1.0, 0.7, uDark);
+    }
+    if (d < 0.0) {
+      vec3 dry = vec3(0.86, 0.78, 0.62) * (0.9 + 0.14 * n2);
+      dry = mix(dry * 0.78, dry, smoothstep(0.0, 0.25, -d));
+      return dry * mix(0.75, 1.03, sh) * mix(1.0, 0.72, uDark);
+    }
+    vec3 sand = vec3(0.80, 0.72, 0.56) * (0.86 + 0.18 * n1 + 0.06 * n2);
+    sand *= 0.96 + 0.05 * sin(p.x * 3.1 + n1 * 6.0 + p.y * 0.8);
+    vec3 gravel = mix(vec3(0.50, 0.48, 0.44), vec3(0.70, 0.66, 0.60), hash(floor(p * 7.0)));
+    vec3 rubble = mix(vec3(0.58, 0.54, 0.46), vec3(0.78, 0.74, 0.66), step(0.5, fbm(p * 1.6))) * (0.85 + 0.2 * hash(floor(p * 4.0)));
+    vec3 rock = vec3(0.42, 0.40, 0.36) * (0.7 + 0.55 * fbm(p * 0.9));
+    vec3 reef = mix(vec3(0.44, 0.39, 0.30), vec3(0.58, 0.38, 0.50), smoothstep(0.45, 0.7, fbm(p * 0.7 + 3.0)));
+    reef = mix(reef, vec3(0.40, 0.48, 0.35), smoothstep(0.55, 0.8, fbm(p * 1.1 + 9.0)));
+    vec4 w = clamp(vMix * 1.7 * (0.55 + 0.9 * vec4(fbm(p * 0.6 + 1.0), fbm(p * 0.6 + 5.0), fbm(p * 0.6 + 9.0), fbm(p * 0.6 + 13.0))), 0.0, 1.0);
+    float ws = w.x + w.y + w.z + w.w;
+    if (ws > 1.0) { w /= ws; ws = 1.0; }
+    vec3 col = sand * (1.0 - ws) + gravel * w.x + rubble * w.y + rock * w.z + reef * w.w;
+    col *= mix(0.72, 1.05, sh);
+    col += vec3(0.85, 1.0, 1.0) * caustic(p * 0.42, uTime * 0.6) * 0.30 * exp(-0.13 * d);
+    vec3 water = mix(vec3(0.20, 0.62, 0.70), vec3(0.04, 0.27, 0.40), clamp(d / 12.0, 0.0, 1.0));
+    col = mix(col * vec3(0.78, 0.95, 1.02), water, (1.0 - exp(-0.15 * d)) * 0.82);
+    return col * mix(1.0, 0.68, uDark);
+  }
+  void main(){
+    float d = vD;
+    vec3 L = normalize(vec3(-0.45, 0.82, 0.36));
+    float sh = clamp(dot(normalize(vN), L), 0.0, 1.0);
+    vec3 col = uSim > 0.5 ? simColor(d, sh) : chartColor(d, sh);
     float s = iso(d, 3.0, 2.2) * uSlices.x + iso(d, 6.0, 2.2) * uSlices.y + iso(d, 9.0, 2.2) * uSlices.z;
-    col = mix(col, uSlice, clamp(s, 0.0, 1.0) * 0.95);
+    col = mix(col, uSlice, clamp(s, 0.0, 1.0) * mix(0.95, 0.75, uSim));
     gl_FragColor = vec4(col, 1.0);
   }`;
 const bedMat = new THREE.ShaderMaterial({ uniforms: chartUniforms(), vertexShader: chartVS, fragmentShader: chartFS });
@@ -196,10 +286,14 @@ const SEG = isPhone() ? 130 : 190;
   const g = new THREE.PlaneGeometry(ext.w, ext.h, SEG, Math.round((SEG * ext.h) / ext.w));
   g.rotateX(-Math.PI / 2);
   const pos = g.attributes.position;
+  const mix = new Float32Array(pos.count * 4);
   for (let i = 0; i < pos.count; i++) {
     const e = pos.getX(i) + ext.ce, n = -pos.getZ(i) + ext.cn;
     pos.setXYZ(i, e, yAt(e, n), -n);
+    const m = mixAt(e, n);
+    mix.set([m.gravel, m.rubble, m.rocks, m.reef], i * 4);
   }
+  g.setAttribute('aMix', new THREE.BufferAttribute(mix, 4));
   g.computeVertexNormals();
   scene.add(new THREE.Mesh(g, bedMat));
 }
@@ -228,6 +322,7 @@ const SEG = isPhone() ? 130 : 190;
   });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.setAttribute('aMix', new THREE.Float32BufferAttribute(new Float32Array((verts.length / 3) * 4), 4));
   g.computeVertexNormals();
   wallMat.side = THREE.DoubleSide;
   scene.add(new THREE.Mesh(g, wallMat));
@@ -292,25 +387,50 @@ SITE.slices.forEach((d) => {
   slices[d] = { on: true, grp, anchor: W(ext.e0, ext.n0, -d * EX) };
 });
 
-/* ── objects as wireframes at true size ── */
-const objMat = new THREE.LineBasicMaterial({ color: T.ink, transparent: true, opacity: 0.85 });
+/* ── 3D models of the objects (true size), plus the pier ── */
+scene.add(new THREE.HemisphereLight(0xe8f4ff, 0x8a7a5a, 2.1));
+const sun = new THREE.DirectionalLight(0xffffff, 2.3);
+sun.position.set(-45, 82, -36);
+scene.add(sun);
+const kit = new Kit();
+kit.setMode('chart', T.clay);
 POINTS.forEach((p) => {
-  const y0 = yAt(p.e, p.n);
-  let geo = null, yOff = 0;
-  const [w, l, h] = p.dims;
-  if (p.shape === 'box' && h) { geo = new THREE.BoxGeometry(w, h * EX, l); yOff = (h * EX) / 2; }
-  if (p.shape === 'pyramid') { geo = new THREE.ConeGeometry(p.dims[0] / Math.sqrt(3), h * EX, 3); yOff = (h * EX) / 2; }
-  if (p.shape === 'cylinder') { geo = new THREE.CylinderGeometry(w / 2, w / 2, l, 14).rotateZ(Math.PI / 2); yOff = (w / 2) * EX; geo.scale(1, EX, 1); }
-  if (!geo) return;
-  const wire = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), objMat);
-  wire.position.copy(W(p.e, p.n, y0 + yOff));
-  scene.add(wire);
+  if (!p.model) return;
+  const obj = buildObject(kit, p);
+  if (!obj) return;
+  obj.position.copy(W(p.e, p.n, yAt(p.e, p.n)));
+  if (p.heading) obj.rotation.y = -rad(p.heading);
+  scene.add(obj);
 });
+scene.add(buildPier(kit, { head: byId.pier, shoreE, yAt, W, EX }));
+
+/* ── simulation extras: scattered rocks and coral heads, and the water surface ── */
+let scatter = null;
+const waterMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  uniforms: { uTime: { value: 0 }, uA: { value: shoreE(-1e4) }, uB: { value: nPier + 6 }, uDark: { value: 0 } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `varying vec3 vW; uniform float uTime, uA, uB, uDark;
+    void main(){
+      float n = -vW.z; float shore = uA - max(0.0, n - uB) * 0.35;
+      if (vW.x < shore) discard;
+      float r = sin(vW.x * 0.9 + uTime * 1.3) * sin(vW.z * 0.7 - uTime) * 0.5 + 0.5;
+      vec3 c = mix(vec3(0.16, 0.55, 0.68), vec3(0.55, 0.85, 0.92), r * 0.35);
+      float edge = smoothstep(0.0, 3.0, vW.x - shore);
+      gl_FragColor = vec4(c * mix(1.0, 0.6, uDark), mix(0.55, 0.16, edge));
+    }`,
+});
+const water = new THREE.Mesh(new THREE.PlaneGeometry(ext.w, ext.h).rotateX(-Math.PI / 2), waterMat);
+water.position.set(ext.ce, 0.02, -ext.cn);
+water.renderOrder = 4;
+water.visible = false;
+scene.add(water);
 
 /* ── X markers + plumb lines ── */
-const xMat = new THREE.MeshBasicMaterial({ color: T.magenta, transparent: true, depthTest: false });
-const xSelMat = new THREE.MeshBasicMaterial({ color: T.ink, transparent: true, depthTest: false });
-const plumbMat = new THREE.LineDashedMaterial({ color: T.ink, dashSize: 0.9, gapSize: 0.9, transparent: true, opacity: 0.38 });
+const xMat = new THREE.MeshBasicMaterial({ color: T.magenta, transparent: true, depthTest: false, fog: false });
+// the selected X goes see-through so the 3D model under it stays visible
+const xSelMat = new THREE.MeshBasicMaterial({ color: T.ink, transparent: true, opacity: 0.35, depthTest: false, fog: false });
+const plumbMat = new THREE.LineDashedMaterial({ color: T.ink, dashSize: 0.9, gapSize: 0.9, transparent: true, opacity: 0.38, fog: false });
 const markers = [];
 POINTS.forEach((p) => {
   const ground = W(p.e, p.n, yAt(p.e, p.n));
@@ -335,7 +455,7 @@ POINTS.forEach((p) => {
 });
 const selRing = new THREE.LineLoop(
   new THREE.BufferGeometry().setFromPoints(Array.from({ length: 64 }, (_, i) => new THREE.Vector3(Math.cos((i / 64) * Math.PI * 2) * 4, 0, Math.sin((i / 64) * Math.PI * 2) * 4))),
-  new THREE.LineDashedMaterial({ color: T.magenta, dashSize: 0.8, gapSize: 0.6, depthTest: false, transparent: true })
+  new THREE.LineDashedMaterial({ color: T.magenta, dashSize: 0.8, gapSize: 0.6, depthTest: false, transparent: true, fog: false })
 );
 selRing.computeLineDistances();
 selRing.renderOrder = 11;
@@ -355,6 +475,7 @@ function trail(a, b, opts) {
   }
   const g = new LineGeometry(); g.setPositions(arr);
   const m = new LineMaterial({ color: opts.color, linewidth: opts.width, dashed: true, dashSize: opts.dash, gapSize: opts.gap, transparent: true, opacity: 0 });
+  m.fog = false;
   m.userData = { role: opts.role };
   lineMats.push(m);
   const line = new Line2(g, m); line.computeLineDistances();
@@ -370,8 +491,8 @@ const labels = POINTS.map((p) => {
   const el = document.createElement('button');
   el.type = 'button';
   el.className = 'plabel';
-  el.innerHTML = `<span class="pname">${esc(p.name)}</span><span class="snd">${p.depthText}${p.live ? ' מ׳, שידור חי' : ''}</span>`;
-  el.setAttribute('aria-label', `${p.name}, עומק ${p.depthText} מטר`);
+  el.innerHTML = `<span class="pname">${esc(p.name)}</span><span class="snd">${p.hasDepth ? p.depthText : ''}${p.live ? ' מ׳, שידור חי' : ''}</span>`;
+  el.setAttribute('aria-label', p.hasDepth ? `${p.name}, עומק ${p.depthText} מטר` : p.name);
   el.addEventListener('click', () => select(p.id));
   labelLayer.appendChild(el);
   return { p, el, w: 0, h: 0 };
@@ -472,7 +593,8 @@ function focusPoint(p) {
   const target = p.world.clone();
   const cur = camera.position.clone().sub(controls.target);
   const sph = new THREE.Spherical().setFromVector3(cur);
-  sph.radius = isPhone() ? 62 : 54;
+  const size = p.id === 'pier' ? 13 : p.id === 'tables3' ? 8 : Math.max(1, ...(p.dims.length ? p.dims : [3]));
+  sph.radius = clamp(size * 4.2, 14, 54) * (isPhone() ? 1.15 : 1);
   sph.phi = rad(48);
   if (cur.length() < 1) sph.theta = 0;
   return { target, pos: target.clone().add(new THREE.Vector3().setFromSpherical(sph)) };
@@ -514,7 +636,7 @@ function bearingIcon(b) {
 
 function dimsText(p) {
   if (p.dimsText) return p.dimsText;
-  if (!p.dims.length) return '<span class="muted">לא רלוונטי</span>';
+  if (!p.dims.length) return `<span class="muted">${p.live ? 'לא רלוונטי' : 'לא נמדדו'}</span>`;
   const [w, l, h] = p.dims;
   return `רוחב ${w}, אורך ${l}, גובה ${h} מ׳`;
 }
@@ -566,14 +688,15 @@ function sketchSVG(p) {
   return `<svg viewBox="0 0 ${Wd} ${Hd}" role="img" aria-label="שרטוט לפי המידות"><path class="sk-hid" d="${hidden.map((e) => seg(...e)).join('')}"/><path class="sk" d="${edges.map((e) => seg(...e)).join('')}"/>${dimMarks}</svg>`;
 }
 
+const thumb = (src) => src.replace(/\.jpg$/i, '-s.jpg');
 function mediaHTML(p) {
   let html = '';
   if (p.live) {
     html += `<div class="p-media"><p class="live-tag">שידור חי</p><div class="live"><iframe src="https://www.youtube-nocookie.com/embed/${LIVE_CAMERA_YOUTUBE_ID}?autoplay=1&mute=1&playsinline=1&rel=0" title="מצלמה תת־ימית בשידור חי" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div><a class="live-link" href="https://www.youtube.com/watch?v=${LIVE_CAMERA_YOUTUBE_ID}" target="_blank" rel="noopener">פתיחה ביוטיוב</a></div>`;
   }
   if (p.photos && p.photos.length) {
-    html += `<div class="p-media gallery">${p.photos.map((ph, i) => `<button type="button" data-photo="${i}" aria-label="הגדלת תמונה ${i + 1}"><img src="${esc(ph.src)}" alt="${esc(ph.caption || p.name)}" loading="lazy"></button>`).join('')}</div>`;
-  } else if (!p.live) {
+    html += `<div class="p-media"><div class="gallery">${p.photos.map((ph, i) => `<button type="button" data-photo="${i}" aria-label="הגדלת תמונה ${i + 1} מתוך ${p.photos.length}"><img src="${esc(thumb(ph.src))}" alt="${esc(ph.caption || `${p.name}, תמונה ${i + 1}`)}" loading="lazy" decoding="async"></button>`).join('')}</div><p class="gallery-count">${p.photos.length} תמונות מהצלילה. לחיצה על תמונה מגדילה אותה.</p></div>`;
+  } else if (!p.live && p.dims.length) {
     html += `<figure class="p-media sketch">${sketchSVG(p)}<p>שרטוט לפי המידות שנמדדו. עדיין אין תמונות לנקודה הזו.</p></figure>`;
   }
   return html;
@@ -596,13 +719,15 @@ function renderPanel(p) {
     </header>
     ${mediaHTML(p)}
     <dl class="facts">
-      <dt>עומק</dt><dd><span class="big">${p.depthText} מ׳</span></dd>
+      <dt>עומק</dt><dd>${p.hasDepth ? `<span class="big">${p.depthText} מ׳</span>` : `<span class="muted">לא נמדד</span>`}</dd>
       <dt>מידות</dt><dd>${dimsText(p)}</dd>
-      <dt>קרקעית</dt><dd>${esc(p.terrain)}</dd>
+      <dt>קרקעית</dt><dd>${p.terrain ? esc(p.terrain) : '<span class="muted">לא תועד</span>'}</dd>
       <dt>חומר</dt><dd>${material}</dd>
       <dt>נ.צ.</dt><dd><div class="coord"><span>${ddmText(p.latDec, true)}</span><span>${ddmText(p.lonDec, false)}</span></div><button type="button" class="copy" id="pCopy">העתקת נ.צ.</button>${est}</dd>
     </dl>
     ${p.note ? `<p class="p-note">${esc(p.note)}</p>` : ''}
+    ${p.model && p.photos.length ? '<p class="p-note">המודל התלת־ממדי במפה הוא דגם מייצג שנבנה לפי התמונות והמידות.</p>' : ''}
+    ${p.model && !p.photos.length ? '<p class="p-note">אין עדיין תמונות לנקודה, ולכן המודל במפה כללי ומבוסס על המידות בלבד.</p>' : ''}
     ${legs.length ? `<section class="legs"><h3>מכאן ממשיכים אל</h3>${legs.map((l) => `
       <button type="button" class="leg-btn" data-go="${l.other.id}">
         ${bearingIcon(l.bearing)}
@@ -616,7 +741,7 @@ function renderPanel(p) {
     catch { ev.target.textContent = txt; }
   });
   panelBody.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => select(b.dataset.go)));
-  panelBody.querySelectorAll('[data-photo]').forEach((b) => b.addEventListener('click', () => openPhoto(p.photos[+b.dataset.photo])));
+  panelBody.querySelectorAll('[data-photo]').forEach((b) => b.addEventListener('click', () => openPhoto(p.photos, +b.dataset.photo, p.name)));
 }
 
 function select(id, { fromMap = false, instant = false } = {}) {
@@ -799,15 +924,20 @@ function applyTheme() {
   [bedMat, wallMat].forEach((m) => {
     m.uniforms.uT1.value.copy(T.t1); m.uniforms.uT2.value.copy(T.t2); m.uniforms.uT3.value.copy(T.t3); m.uniforms.uT4.value.copy(T.t4);
     m.uniforms.uInk.value.copy(T.ink); m.uniforms.uSlice.value.copy(T.slice); m.uniforms.uDark.value = T.dark ? 1 : 0;
+    m.uniforms.uLand.value.copy(T.buff);
   });
+  kit.setMode(kit.mode, T.clay);
+  waterMat.uniforms.uDark.value = T.dark ? 1 : 0;
+  if (scene.fog) scene.fog.color.copy(T.dark ? new THREE.Color('#0b2a3a') : new THREE.Color('#2a7090'));
   scene.traverse((o) => {
     if (o.userData.themeColor && o.material) o.material.color.copy(o.userData.themeColor === 'ink' ? T.ink : T.slice);
   });
   Object.values(slices).forEach((s) => (s.grp.children[0].material.opacity = T.dark ? 0.13 : 0.1));
-  xMat.color.copy(T.magenta); xSelMat.color.copy(T.ink); plumbMat.color.copy(T.ink); objMat.color.copy(T.ink);
+  xMat.color.copy(T.magenta); xSelMat.color.copy(T.ink); plumbMat.color.copy(T.ink);
   selRing.material.color.copy(T.magenta);
   lineMats.forEach((m) => m.color.copy(m.userData.role === 'main' ? T.magenta : T.ink2));
   syncThemeButton();
+
 }
 themeBtn.addEventListener('click', () => {
   const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
@@ -816,6 +946,26 @@ themeBtn.addEventListener('click', () => {
   applyTheme();
 });
 syncThemeButton();
+
+/* ═════════════ seabed simulation switch ═════════════ */
+const simBtn = $('#simToggle');
+let sim = false;
+function setSim(on) {
+  sim = on;
+  [bedMat, wallMat].forEach((m) => (m.uniforms.uSim.value = on ? 1 : 0));
+  kit.setMode(on ? 'sim' : 'chart', T.clay);
+  if (on && !scatter) {
+    scatter = buildScatter(kit, { ext, inSea, typeAt: mixAt, yAt, W });
+    scene.add(scatter);
+  }
+  if (scatter) scatter.visible = on;
+  water.visible = on;
+  scene.fog = on ? new THREE.FogExp2(T.dark ? '#0b2a3a' : '#2a7090', 0.0016) : null;
+  simBtn.setAttribute('aria-checked', String(on));
+  try { localStorage.setItem('iui-sim', on ? '1' : '0'); } catch {}
+}
+simBtn.addEventListener('click', () => setSim(!sim));
+try { if (localStorage.getItem('iui-sim') === '1') setSim(true); } catch {}
 
 /* ═════════════ compass & scale ═════════════ */
 const rose = $('#compassRose');
@@ -900,6 +1050,11 @@ function frame(now) {
     m.grp.rotation.y = az;
     if (m.p === selected) selRing.scale.setScalar(clamp(d / 105, 0.35, 2.4));
   });
+  if (sim) {
+    const t = reduceMotion ? 0 : now / 1000;
+    bedMat.uniforms.uTime.value = t;
+    waterMat.uniforms.uTime.value = t;
+  }
   const fade = reduceMotion ? 1 : clamp((now - introStart - 500) / 700, 0, 1);
   lineMats.forEach((m) => (m.opacity = m.userData.role === 'main' ? fade : fade * 0.85));
   layoutLabels();
@@ -967,7 +1122,7 @@ function profileFigure() {
 function bandsHTML() {
   const bands = [[0, 3], [3, 6], [6, 9], [9, 99]];
   return `<div class="bands">${bands.map(([a, b]) => {
-    const pts = POINTS.filter((p) => p.depthMid >= a && p.depthMid < b);
+    const pts = POINTS.filter((p) => p.hasDepth && p.depthMid >= a && p.depthMid < b);
     return `<section><h3>${b === 99 ? `${a} מ׳ ומטה` : `${a}–${b} מ׳`}</h3><ul>${pts.length ? pts.map((p) => `<li>${esc(p.name)} <span class="muted">(${p.depthText})</span></li>`).join('') : '<li class="none">אין נקודות</li>'}</ul></section>`;
   }).join('')}</div>`;
 }
@@ -977,11 +1132,14 @@ function slideHTML(s) {
     const depths = POINTS.flatMap((p) => p.depth);
     let lo = 0, hi = 0;
     ROUTE.forEach((l) => { const [a, b] = String(l.dist).split('–').map(Number); lo += a; hi += b || a; });
-    body = `<p class="lead">${esc(s.body)}</p><div class="stats">
+    const text = `<p class="lead">${esc(s.body)}</p><div class="stats">
       <div><b>${POINTS.length}</b><span>נקודות מסומנות</span></div>
       <div><b>${num(`${lo}–${hi}`)}</b><span>מטר במסלול הראשי</span></div>
       <div><b>${Math.max(...depths)}</b><span>מטר, העומק המרבי</span></div>
       <div><b>${Math.min(...depths)}</b><span>מטר, העומק הרדוד</span></div></div>`;
+    body = s.image ? `<div class="slide-cols slide-photo"><div>${text}</div><figure class="slide-fig"><img src="${esc(s.image)}" alt="${esc(s.title)}"></figure></div>` : text;
+  } else if (s.type === 'image') {
+    body = `<figure class="slide-fig slide-fig-wide"><img src="${esc(s.image)}" alt="${esc(s.caption || s.title)}">${s.caption ? `<figcaption>${esc(s.caption)}</figcaption>` : ''}</figure>`;
   } else if (s.type === 'text') {
     body = (s.body ? `<p class="lead">${esc(s.body)}</p>` : '') + (s.list ? `<dl class="method">${s.list.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>` : '');
   } else if (s.type === 'people') {
@@ -1035,15 +1193,41 @@ deck.addEventListener('keydown', (e) => {
   });
 }
 
-/* lightbox */
+/* lightbox with previous / next */
 const lb = $('#lightbox');
-function openPhoto(ph) {
-  $('#lbImg').src = ph.src; $('#lbImg').alt = ph.caption || '';
-  $('#lbCap').textContent = ph.caption || '';
+let lbSet = null;
+function showPhoto(k) {
+  const { list, name } = lbSet;
+  lbSet.i = (k + list.length) % list.length;
+  const ph = list[lbSet.i];
+  $('#lbImg').src = ph.src;
+  $('#lbImg').alt = ph.caption || `${name}, תמונה ${lbSet.i + 1}`;
+  $('#lbCap').textContent = `${ph.caption ? ph.caption + '. ' : ''}${name}, ${lbSet.i + 1} מתוך ${list.length}`;
+  $('#lbPrev').hidden = $('#lbNext').hidden = list.length < 2;
+}
+function openPhoto(list, i = 0, name = '') {
+  if (!Array.isArray(list)) list = [list];
+  lbSet = { list, name, i };
+  showPhoto(i);
   lb.showModal();
 }
 $('#lbClose').addEventListener('click', () => lb.close());
+$('#lbPrev').addEventListener('click', () => showPhoto(lbSet.i - 1));
+$('#lbNext').addEventListener('click', () => showPhoto(lbSet.i + 1));
 lb.addEventListener('click', (e) => { if (e.target === lb) lb.close(); });
+lb.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') { e.preventDefault(); showPhoto(lbSet.i + 1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); showPhoto(lbSet.i - 1); }
+});
+{
+  let x0 = null;
+  lb.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  lb.addEventListener('touchend', (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) > 50) showPhoto(lbSet.i + (dx > 0 ? 1 : -1));
+  });
+}
 
 /* keyboard */
 document.addEventListener('keydown', (e) => {
