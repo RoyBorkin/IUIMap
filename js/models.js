@@ -380,25 +380,15 @@ export function buildPier(kit, { head, bearing, headSize, walkWidth, seaDist, yA
   deckBox(H, len, ww);
 
   // lattice piles from the seabed to under the deck
+  // simple round concrete columns from the seabed up to the deck
+  const CONCRETE_COL = '#B9B6AC';
+  const column = new THREE.CylinderGeometry(0.3, 0.3, 1, 18);
   const pile = (u, v) => {
     const q = at(u, v);
-    const yb = Math.min(yAt(q.e, q.n), -0.3);
+    const yb = Math.min(yAt(q.e, q.n), -0.3) - 0.3;
     const top = DECK - DECK_T;
     if (seaDist(q.e, q.n) < 0.5 || top - yb < 0.6) return;
-    const c = 0.28;
-    const corners = [[-c, -c], [c, -c], [c, c], [-c, c]];
-    corners.forEach(([du, dv]) => b.rod(P(u + du, v + dv, yb - 0.4), P(u + du, v + dv, top), 0.05, STEEL));
-    const levels = Math.max(2, Math.round((top - yb) / 1.6));
-    for (let k = 0; k < levels; k++) {
-      const y0 = yb + ((top - yb) * k) / levels, y1 = yb + ((top - yb) * (k + 1)) / levels;
-      for (let i = 0; i < 4; i++) {
-        const [au, av] = corners[i], [bu, bv] = corners[(i + 1) % 4];
-        b.rod(P(u + au, v + av, y0), P(u + bu, v + bv, y1), 0.025, STEEL);
-      }
-    }
-    // triangular foot struts, as in the underwater photos
-    b.rod(P(u, v + c, yb + (top - yb) * 0.45), P(u, v + c + 2.2, yb + 0.1), 0.045, STEEL);
-    b.rod(P(u, v + c + 2.2, yb + 0.1), P(u, v + c, yb + 0.1), 0.045, STEEL);
+    b.geo(column, CONCRETE_COL, W(q.e, q.n, (yb + top) / 2).toArray(), [0, 0, 0], [1, top - yb, 1]);
   };
   [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1]].forEach(([su, sv]) => pile(su * (H - 0.6), sv * (H - 0.6)));
   for (let u = H + 4; u < len - 2; u += 8) { pile(u, -ww + 0.3); pile(u, ww - 0.3); }

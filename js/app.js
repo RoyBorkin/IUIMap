@@ -1149,17 +1149,41 @@ function ensureCorals() {
   if (corals) return;
   const places = [];
   const r = (() => { let a = 1234567; return () => ((a = (a * 1103515245 + 12345) % 2147483648) / 2147483648); })();
-  const TINTS = ['#c9a27a', '#b07a9a', '#9fb27a', '#c48b5a', '#8f7fb0', '#d0b48a', '#a5c0a0', '#b89070'];
-  for (let k = 0; k < 40000 && places.length < 240; k++) {
-    const e = ext.e0 + r() * ext.w, n = ext.n0 + r() * ext.h;
-    if (!inSea(e, n)) continue;
-    const m = mixAt(e, n);
-    if (m.reef < 0.5 || r() > m.reef) continue;
-    places.push({ x: e, y: yAt(e, n), z: -n, size: 0.6 + r() * 1.1, rot: r() * Math.PI * 2, tint: TINTS[Math.floor(r() * TINTS.length)] });
+  const TINTS = ['#c9a27a', '#b07a9a', '#9fb27a', '#c48b5a', '#8f7fb0', '#d0b48a', '#a5c0a0', '#b89070', '#a88a6a', '#9a7fa0'];
+  // sample only inside the reef areas; the further from the reef edge, the denser the corals
+  const reefs = COVER_POLYS.filter((c) => c.type === 'reef');
+  const target = isPhone() ? 2000 : 4800;
+  // pick each reef area in proportion to its size, so the big reefs get their share
+  const boxes = reefs.map((c) => {
+    const es = c.pts.map((q) => q.e), ns = c.pts.map((q) => q.n);
+    const b = { poly: c.pts, e0: Math.min(...es), e1: Math.max(...es), n0: Math.min(...ns), n1: Math.max(...ns) };
+    b.area = (b.e1 - b.e0) * (b.n1 - b.n0);
+    return b;
+  });
+  const total = boxes.reduce((a, b) => a + b.area, 0);
+  for (let k = 0; k < 160000 && places.length < target; k++) {
+    let pick = r() * total, box = boxes[0];
+    for (const b of boxes) { if ((pick -= b.area) <= 0) { box = b; break; } }
+    const poly = box.poly;
+    const e = box.e0 + r() * (box.e1 - box.e0);
+    const n = box.n0 + r() * (box.n1 - box.n0);
+    if (!inSea(e, n) || e < ext.e0 || e > ext.e1 || n < ext.n0 || n > ext.n1) continue;
+    const inside = polyDist(poly, e, n);
+    if (inside < -1) continue;
+    const core = smooth01(-1, 9, inside);
+    if (r() > 0.12 + 0.88 * core) continue;
+    // corals grow in clumps: a few colonies of different species around each spot
+    const clump = 1 + Math.floor(r() * (2 + core * 4));
+    for (let c = 0; c < clump; c++) {
+      const a = r() * Math.PI * 2, d = c ? 0.5 + r() * 1.4 : 0;
+      const ce = e + Math.cos(a) * d, cn = n + Math.sin(a) * d;
+      places.push({ x: ce, y: yAt(ce, cn), z: -cn, size: 0.35 + r() * (0.5 + core * 0.8), rot: r() * Math.PI * 2, tint: TINTS[Math.floor(r() * TINTS.length)] });
+    }
   }
   coverStatus.hidden = false;
   coverStatus.textContent = t('coralsLoading', 0, CORAL_MODELS.length);
   corals = coralReef(CORAL_MODELS, places, {
+    cells: isPhone() ? 13 : 16, // lighter models, so the reef can be filled densely
     onStatus: ({ done, failed, total }) => {
       if (done < total) coverStatus.textContent = t('coralsLoading', done, total);
       else coverStatus.textContent = failed === total ? t('coralsFailed') : t('coralsDone');

@@ -76,13 +76,13 @@ export const POINTS = [
   },
   {
     id: 'pier', name: 'מזח',
-    en: {name: "Pier", terrain: "Rocks", material: "Steel and concrete", dimsText: "9 m wide", note: "The pier model is based on the satellite photo and the photos above and below the water: steel lattice piles, a pier head with fender tyres and a railing, and a weather mast."},
+    en: {name: "Pier", terrain: "Rocks", material: "Concrete", dimsText: "9 m wide", note: "The pier model is based on the satellite photo and the photos above and below the water: round concrete columns, a pier head with fender tyres and a railing, and a weather mast."},
     lat: [29, 30.110], lon: [34, 55.063],
     // the measured position lies ~9 m off the pier in the satellite image; snap it onto the pier head (m east, m north)
     snap: [-6, -6.5],
     depth: [4], dims: [9], dimsText: 'רוחב 9 מ׳', shape: 'pier',
-    terrain: 'סלעים', material: 'פלדה ובטון',
-    note: 'המודל של המזח נבנה לפי תמונת הלוויין ולפי התמונות מעל ומתחת למים: עמודי סריג מפלדה, ראש מזח עם צמיגים ומעקה, ותורן מטאורולוגי.',
+    terrain: 'סלעים', material: 'בטון',
+    note: 'המודל של המזח נבנה לפי תמונת הלוויין ולפי התמונות מעל ומתחת למים: עמודי בטון עגולים, ראש מזח עם צמיגים ומעקה, ותורן מטאורולוגי.',
     photos: photoSet('pier', 8),
   },
   {
@@ -95,11 +95,11 @@ export const POINTS = [
   },
   {
     id: 'habitat2', name: 'הביטט 2',
-    en: {name: "Habitat 2", note: "An extra point about 15 m from the Habitat, towards deeper water. Depth and size not measured yet."},
+    en: {name: "Habitat 2", note: "An extra point about 15 m from the Habitat towards deeper water, about 4 m deeper. Size not measured yet."},
     derive: { from: 'habitat', bearing: 135, dist: 15 },
-    depth: [], dims: [], shape: 'none',
+    depth: [14, 15], dims: [], shape: 'none',
     terrain: '', material: '',
-    note: 'נקודה נוספת כ־15 מטר מההביטט, לכיוון המים העמוקים. עומק ומידות עדיין לא נמדדו.',
+    note: 'נקודה נוספת כ־15 מטר מההביטט לכיוון המים העמוקים, נמוכה ממנו בכ־4 מטר. המידות עדיין לא נמדדו.',
     photos: [],
   },
   {

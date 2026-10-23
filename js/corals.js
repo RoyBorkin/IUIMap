@@ -61,13 +61,13 @@ function simplify(src, cells = 38) {
 }
 
 /* load one specimen and return { geometry, material, base } normalised so it sits on y = 0 and is 1 m wide */
-async function loadSpecimen(spec) {
+async function loadSpecimen(spec, cells) {
   const gltf = await getLoader().loadAsync(spec.url);
   let mesh = null;
   gltf.scene.traverse((o) => { if (!mesh && o.isMesh) mesh = o; });
   if (!mesh) throw new Error('no mesh');
   mesh.updateWorldMatrix(true, false);
-  const geo = simplify(mesh.geometry.clone().applyMatrix4(mesh.matrixWorld));
+  const geo = simplify(mesh.geometry.clone().applyMatrix4(mesh.matrixWorld), cells);
   geo.computeBoundingBox();
   const bb = geo.boundingBox, size = new THREE.Vector3(), c = new THREE.Vector3();
   bb.getSize(size); bb.getCenter(c);
@@ -84,13 +84,13 @@ async function loadSpecimen(spec) {
  * places: [{ x, y, z, size, rot, tint }] in world units (y is the ground height).
  * Returns a THREE.Group, filled as each specimen arrives.
  */
-export function coralReef(specs, places, { onStatus } = {}) {
+export function coralReef(specs, places, { onStatus, cells = 20 } = {}) {
   const group = new THREE.Group();
   let done = 0, failed = 0;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color();
   specs.forEach((spec, si) => {
     const mine = places.filter((_, i) => i % specs.length === si);
-    loadSpecimen(spec).then((sp) => {
+    loadSpecimen(spec, cells).then((sp) => {
       const im = new THREE.InstancedMesh(sp.geometry, sp.material, mine.length);
       mine.forEach((pl, i) => {
         const s = pl.size * (spec.size / 0.8);
