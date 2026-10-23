@@ -15,6 +15,8 @@
   --glass: rgba(244, 247, 246, .9);
   --focus: #B4247E;
   --clay: #E3E8E5;
+  --reef: #C8574A;
+  --rock: #A9873C;
   --sim-bg: #F4F7F6;
 
   --serif: 'Frank Ruhl Libre', 'David Libre', 'Times New Roman', serif;
@@ -48,6 +50,8 @@
   --glass: rgba(8, 20, 31, .88);
   --focus: #E874BD;
   --clay: #5F7787;
+  --reef: #D9776A;
+  --rock: #C9A456;
   --sim-bg: #08141F;
   color-scheme: dark;
 }
@@ -197,6 +201,14 @@ svg { display: block; }
 .legend { display: flex; gap: 10px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 11px; color: var(--ink-2); }
 .legend li { display: flex; align-items: center; gap: 4px; }
 .legend i { width: 14px; height: 10px; border: 1px solid var(--rule); }
+.legend-cover { margin-top: 4px; }
+.legend-cover i.sand { background: var(--t2); }
+.depths:not(.cover-on) .legend-cover { display: none; }
+.chip-cover { margin-top: 6px; border-color: var(--reef); color: var(--reef); }
+.chip-cover::before { border-top: 0; width: 10px; height: 10px; border-radius: 50%; background: currentColor; opacity: .35; }
+.chip-cover[aria-checked="true"] { background: var(--reef); color: var(--paper); }
+.chip-cover[aria-checked="true"]::before { opacity: 1; background: var(--paper); }
+.cover-status { margin: 6px 0 0; font-size: 11px; color: var(--ink-2); max-width: 240px; }
 
 .nav-widgets { display: flex; align-items: flex-end; gap: 10px; }
 .compass {
@@ -494,6 +506,10 @@ dialog { color: var(--ink); }
   .depths { padding: 7px 9px 7px; }
   .depths-title { display: none; }
   .chip { height: 32px; padding: 0 9px; font-size: var(--s-1); }
+  .depths { display: flex; gap: 6px; align-items: center; }
+  .chip-cover { margin-top: 0; }
+  .chip-cover span { max-width: 4.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cover-status { display: none; }
   .legend { display: none; }
   .compass, .compass svg { width: 52px; height: 52px; }
   .scalebar { display: none; }

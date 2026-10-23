@@ -3,10 +3,11 @@ import { MapControls } from 'three/addons/controls/MapControls.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
-import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID, SHORELINE, PIER, BUILDINGS } from './data.js';
+import { SITE, POINTS, ROUTE, BRANCHES, DECKS, LIVE_CAMERA_YOUTUBE_ID, SHORELINE, PIER, BUILDINGS, ISOBATHS, DROP, GROUND_MAP, COVER, PIPES, CORAL_MODELS } from './data.js';
+import { coralReef } from './corals.js';
 import { UI } from './i18n.js';
 import { qrSVG } from './qr.js';
-import { Kit, buildObject, buildPier, buildScatter, buildBuildings } from './models.js';
+import { Kit, buildObject, buildPier, buildScatter, buildBuildings, buildPipes } from './models.js';
 
 THREE.ColorManagement.enabled = false;
 
@@ -124,42 +125,85 @@ function ddmText(v, isLat) {
 const bearingBetween = (a, b) => (deg(Math.atan2(b.e - a.e, b.n - a.n)) + 360) % 360;
 const distBetween = (a, b) => Math.hypot(b.e - a.e, b.n - a.n);
 
-/* ═════════════ seabed model ═════════════
-   A plane fitted to the measured depths, plus a gaussian-weighted
-   correction so the surface passes close to every measured point. */
+/* ═════════════ position along the shore ═════════════ */
 POINTS.forEach((p) => (p.s = seaDist(p.e, p.n)));
+// metres along the shore from the pier, positive towards the north-east.
+// Measured on a straight axis following the coast at the pier, so it changes smoothly everywhere
+// (the nearest point on a curved waterline can jump from one bend to another).
+const SHORE_AXIS = (() => { const b = rad(shoreBearing(byId.pier.e, byId.pier.n, 45)); return { e: Math.sin(b), n: Math.cos(b) }; })();
+const alongShore = (e, n) => (e - byId.pier.e) * SHORE_AXIS.e + (n - byId.pier.n) * SHORE_AXIS.n;
 
 /* ═════════════ seabed model ═════════════
-   A shallow shelf that reaches about 5–6 m, then a slope down to the deep water,
-   both measured from the waterline. The drop-off distance and the slope are fitted
-   to the measured depths, and a local correction makes the surface pass through
-   every measured point. */
-const SHELF = 5.5;
-const profile = (s, sA, m) => SHELF * Math.tanh((1.7 * s) / sA) + m * 3 * Math.log1p(Math.exp((s - sA) / 3));
-const fit = (() => {
-  const pts = POINTS.filter((p) => p.hasDepth);
-  let best = { err: Infinity };
-  for (let sA = 8; sA <= 90; sA += 1) for (let m = 0.05; m <= 0.8; m += 0.01) {
-    const err = pts.reduce((a, p) => a + (profile(p.s, sA, m) - p.depthMid) ** 2, 0);
-    if (err < best.err) best = { err, sA, m };
-  }
-  return best;
-})();
-const seabedModel = (() => {
-  const res = POINTS.filter((p) => p.hasDepth).map((p) => [p.e, p.n, p.depthMid - profile(p.s, fit.sA, fit.m)]);
-  // inverse-distance weights: exact at each point, fading to the fitted profile ~15 m away
-  return (e, n, s) => {
-    let ws = 0, wr = 0;
-    for (const [pe, pn, r] of res) {
-      const d2 = (e - pe) ** 2 + (n - pn) ** 2;
-      const w = Math.exp(-d2 / (2 * 11 * 11)) / (d2 + 0.6) ** 1.5;
-      ws += w; wr += w * r;
-    }
-    const noise = 0.12 * Math.sin(e * 0.19 + n * 0.11) + 0.08 * Math.sin(e * 0.07 - n * 0.23 + 1.3) + 0.05 * Math.sin(e * 0.41 + n * 0.37 + 2.1);
-    return profile(s, fit.sA, fit.m) + wr / (ws + 0.0015) + noise * Math.min(1, s / 10);
+   Depth lines (3, 6, 10 m) read from the IUI beach sign, a reef wall from
+   12 m down to 25 m, and a local shift of those lines so the surface passes
+   through every depth the team measured. */
+function isoAt(t) {
+  const L = ISOBATHS;
+  if (t <= L[0].t) return L[0];
+  if (t >= L[L.length - 1].t) return L[L.length - 1];
+  let k = 0;
+  while (L[k + 1].t < t) k++;
+  const a = L[k], b = L[k + 1], f = (t - a.t) / (b.t - a.t);
+  return { s3: a.s3 + (b.s3 - a.s3) * f, s6: a.s6 + (b.s6 - a.s6) * f, s10: a.s10 + (b.s10 - a.s10) * f };
+}
+// monotone cubic (Fritsch–Carlson) through the knots, so depth always grows towards the sea
+function pchip(xs, ys, x) {
+  const n = xs.length;
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[n - 1]) return ys[n - 1];
+  let k = 0;
+  while (xs[k + 1] < x) k++;
+  const d = (i) => (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]);
+  const m = (i) => {
+    if (i === 0) return d(0);
+    if (i === n - 1) return d(n - 2);
+    const a = d(i - 1), b = d(i);
+    if (a * b <= 0) return 0;
+    const w1 = 2 * (xs[i + 1] - xs[i]) + (xs[i] - xs[i - 1]), w2 = (xs[i + 1] - xs[i]) + 2 * (xs[i] - xs[i - 1]);
+    return (w1 + w2) / (w1 / a + w2 / b);
   };
-})();
+  const h = xs[k + 1] - xs[k], t = (x - xs[k]) / h;
+  const h00 = 2 * t ** 3 - 3 * t ** 2 + 1, h10 = t ** 3 - 2 * t ** 2 + t, h01 = -2 * t ** 3 + 3 * t ** 2, h11 = t ** 3 - t ** 2;
+  return h00 * ys[k] + h10 * h * m(k) + h01 * ys[k + 1] + h11 * h * m(k + 1);
+}
+function profileAt(s, t) {
+  if (s <= 0) return 0;
+  const iso = isoAt(t);
+  const s12 = iso.s10 + DROP.d12After10, s25 = s12 + DROP.wallTo25;
+  if (s >= s25) return DROP.floor + 4 * (1 - Math.exp(-(s - s25) / 60)); // the deep floor keeps sloping gently, never flat
+  return pchip([0, iso.s3, iso.s6, iso.s10, s12, s25], [0, 3, 6, 10, 12, DROP.floor], s);
+}
+// distance from shore at which the profile reaches depth d (inverse of profileAt)
+function sForDepth(d, t) {
+  let lo = 0, hi = 200;
+  for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (profileAt(mid, t) < d) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+POINTS.forEach((p) => {
+  p.t = alongShore(p.e, p.n);
+  if (p.hasDepth) p.shift = sForDepth(p.depthMid, p.t) - p.s;
+});
+// how far the depth lines are shifted at a given spot: exact at each point, fading out ~30 m away
+function lineShift(e, n) {
+  let ws = 0, wr = 0;
+  for (const p of POINTS) {
+    if (p.shift === undefined) continue;
+    const d2 = (e - p.e) ** 2 + (n - p.n) ** 2;
+    const w = Math.exp(-d2 / (2 * 16 * 16)) / (d2 + 0.6) ** 1.5;
+    ws += w; wr += w * p.shift;
+  }
+  return wr / (ws + 0.0015);
+}
+const seabedModel = (e, n, s) => {
+  const noise = 0.1 * Math.sin(e * 0.19 + n * 0.11) + 0.07 * Math.sin(e * 0.07 - n * 0.23 + 1.3) + 0.04 * Math.sin(e * 0.41 + n * 0.37 + 2.1);
+  return profileAt(s + lineShift(e, n), alongShore(e, n)) + noise * Math.min(1, s / 10);
+};
+const MAX_DEPTH = DROP.floor + 5;
 
+/* models that run along the shore */
+POINTS.forEach((p) => {
+  if (['nursery', 'deep', 'shahar'].includes(p.id)) p.heading = (shoreBearing(p.e, p.n, 45) + 90) % 360; // long side along the shore
+});
 /* level pads under the objects, so they stand on the seabed instead of sinking into the slope */
 POINTS.forEach((p) => {
   if (p.model !== 'tables3') return;
@@ -171,7 +215,7 @@ const PADS = [];
 POINTS.forEach((p) => {
   if (!p.model) return;
   const parts = p.parts || [{ e: p.e, n: p.n, r: p.dims.length >= 2 ? Math.hypot(p.dims[0], p.dims[1]) / 2 + 0.5 : 1.2 }];
-  parts.forEach((q) => { const s = seaDist(q.e, q.n); PADS.push({ ...q, d: clamp(seabedModel(q.e, q.n, s), 0, 14) }); });
+  parts.forEach((q) => { const s = seaDist(q.e, q.n); PADS.push({ ...q, d: clamp(seabedModel(q.e, q.n, s), 0, MAX_DEPTH) }); });
 });
 const smooth01 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -179,7 +223,7 @@ const smooth01 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return
 function seabed(e, n) {
   const s = seaDist(e, n);
   if (s <= 0) return -1.6 * (1 - Math.exp(s / 18));
-  const d = clamp(seabedModel(e, n, s), 0, 14);
+  const d = clamp(seabedModel(e, n, s), 0, MAX_DEPTH);
   // nearby pads are blended with each other, so close objects don't fight over the same ground
   let ws = 0, wd = 0, wmax = 0;
   for (const q of PADS) {
@@ -194,22 +238,39 @@ function seabed(e, n) {
 const yAt = (e, n) => -seabed(e, n) * EX;
 const inSea = (e, n) => seaDist(e, n) > 1.5;
 
-/* bottom types from the survey table, spread around each point */
-const TYPE_WORDS = { gravel: ['חצץ', 'אבנים'], rubble: ['דרדרת'], rocks: ['סלע'], reef: ['שונית'], sand: ['חול'] };
-POINTS.forEach((p) => {
-  p.types = Object.keys(TYPE_WORDS).filter((k) => TYPE_WORDS[k].some((w) => (p.terrain || '').includes(w)));
-});
-function mixAt(e, n) {
-  const acc = { gravel: 0, rubble: 0, rocks: 0, reef: 0, sand: 0.35 };
-  for (const p of POINTS) {
-    if (!p.types.length) continue;
-    const g = Math.exp(-((e - p.e) ** 2 + (n - p.n) ** 2) / (2 * 15 * 15));
-    p.types.forEach((t) => (acc[t] += g / p.types.length));
+/* ═════════════ seabed cover (reef / stones / sand) from the team's ground map ═════════════ */
+const PIER_HEAD = { e: byId.pier.e + PIER.headOffset[0], n: byId.pier.n + PIER.headOffset[1] };
+function mapPxToLocal([x, y]) {
+  const [ax, ay] = GROUND_MAP.anchorPx;
+  const dx = x - ax, dy = y - ay;
+  const dist = Math.hypot(dx, dy) * GROUND_MAP.metresPerPx;
+  const b = Math.atan2(dx, -dy) + rad(GROUND_MAP.rotationDeg);
+  return { e: PIER_HEAD.e + dist * Math.sin(b), n: PIER_HEAD.n + dist * Math.cos(b) };
+}
+const COVER_POLYS = COVER.map((c) => ({ type: c.type, pts: c.px.map(mapPxToLocal) }));
+// signed distance to a polygon (positive inside)
+function polyDist(poly, e, n) {
+  let inside = false, best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.n > n) !== (b.n > n) && e < ((b.e - a.e) * (n - a.n)) / (b.n - a.n) + a.e) inside = !inside;
+    const de = b.e - a.e, dn = b.n - a.n, L2 = de * de + dn * dn || 1;
+    const t = clamp(((e - a.e) * de + (n - a.n) * dn) / L2, 0, 1);
+    best = Math.min(best, Math.hypot(e - (a.e + de * t), n - (a.n + dn * t)));
   }
-  const s = seaDist(e, n);
-  if (s < 14) acc.sand += (14 - Math.max(0, s)) / 6;
-  const tot = acc.gravel + acc.rubble + acc.rocks + acc.reef + acc.sand;
-  return { gravel: acc.gravel / tot, rubble: acc.rubble / tot, rocks: acc.rocks / tot, reef: acc.reef / tot };
+  return inside ? best : -best;
+}
+// gradual, slightly irregular borders between reef, stones and sand
+function mixAt(e, n) {
+  if (seaDist(e, n) < 0.5) return { gravel: 0, rubble: 0, rocks: 0, reef: 0 };
+  const wobble = 1.6 * Math.sin(e * 0.31 + n * 0.17) + 1.1 * Math.sin(e * 0.13 - n * 0.37 + 2.0) + 0.7 * Math.sin(e * 0.71 + n * 0.53);
+  let reef = 0, rocks = 0;
+  for (const c of COVER_POLYS) {
+    const w = smooth01(-3.5, 3.5, polyDist(c.pts, e, n) + wobble);
+    if (c.type === 'reef') reef = Math.max(reef, w); else rocks = Math.max(rocks, w);
+  }
+  if (reef + rocks > 1) { const k = 1 / (reef + rocks); reef *= k; rocks *= k; }
+  return { gravel: 0, rubble: rocks * 0.25, rocks: rocks * 0.75, reef };
 }
 
 /* ═════════════ block extent ═════════════ */
@@ -229,7 +290,7 @@ const ext = (() => {
 })();
 ext.w = ext.e1 - ext.e0; ext.h = ext.n1 - ext.n0;
 ext.ce = (ext.e0 + ext.e1) / 2; ext.cn = (ext.n0 + ext.n1) / 2;
-const BASE_Y = -15 * EX;
+const BASE_Y = -(MAX_DEPTH + 2) * EX;
 // world: x = east, z = -north
 const W = (e, n, y) => new THREE.Vector3(e, y, -n);
 
@@ -239,7 +300,7 @@ function readTheme() {
   const c = (n) => new THREE.Color(cs.getPropertyValue(n).trim());
   return {
     paper: c('--paper'), ink: c('--ink'), ink2: c('--ink-2'), magenta: c('--magenta'), slice: c('--slice'),
-    t1: c('--t1'), t2: c('--t2'), t3: c('--t3'), t4: c('--t4'), buff: c('--buff'),
+    t1: c('--t1'), t2: c('--t2'), t3: c('--t3'), t4: c('--t4'), buff: c('--buff'), reef: c('--reef'), rock: c('--rock'),
     clay: c('--clay'), simBg: c('--sim-bg'),
     dark: document.documentElement.dataset.theme === 'dark',
   };
@@ -275,7 +336,8 @@ const chartUniforms = () => ({
   uInk: { value: T.ink.clone() }, uSlice: { value: T.slice.clone() }, uLand: { value: T.buff.clone() },
   uSlices: { value: new THREE.Vector3(1, 1, 1) },
   uEx: { value: EX }, uWall: { value: 0 }, uDark: { value: T.dark ? 1 : 0 },
-  uSim: { value: 0 }, uTime: { value: 0 },
+  uSim: { value: 0 }, uTime: { value: 0 }, uCover: { value: 1 },
+  uReef: { value: T.reef.clone() }, uRock: { value: T.rock.clone() },
 });
 const chartVS = /* glsl */`
   attribute vec4 aMix;
@@ -291,8 +353,8 @@ const chartVS = /* glsl */`
   }`;
 const chartFS = /* glsl */`
   varying float vD; varying vec3 vN; varying vec3 vW; varying vec4 vMix;
-  uniform vec3 uT1, uT2, uT3, uT4, uInk, uSlice, uSlices, uLand;
-  uniform float uWall, uDark, uSim, uTime;
+  uniform vec3 uT1, uT2, uT3, uT4, uInk, uSlice, uSlices, uLand, uReef, uRock;
+  uniform float uWall, uDark, uSim, uTime, uCover;
   float iso(float v, float k, float px){
     float fw = max(fwidth(v), 1e-4);
     return 1.0 - smoothstep(px * 0.5, px * 0.5 + 1.0, abs(v - k) / fw);
@@ -315,8 +377,18 @@ const chartFS = /* glsl */`
     col *= 1.0 - 0.10 * uWall;
     float fw = max(fwidth(d), 1e-4);
     float fine = 1.0 - smoothstep(0.4, 1.4, abs(d - floor(d + 0.5)) / fw);
+    // thin 1 m lines fade out where they crowd together on the steep reef wall
+    fine *= 1.0 - smoothstep(0.18, 0.45, fw);
     col = mix(col, uInk, fine * mix(0.16, 0.22, uDark) * step(0.0, d));
     col = mix(col, uInk, iso(d, 0.0, 2.0) * 0.9 * (1.0 - uWall));
+    // seabed cover, drawn as chart-style tints: reef with small wave marks, stones as dots
+    vec4 cv = vMix * uCover * (1.0 - uWall);
+    float reef = cv.w, rock = cv.y + cv.z;
+    vec2 q = vW.xz;
+    float waves = smoothstep(0.82, 0.95, sin(q.x * 1.6 + sin(q.y * 1.3) * 1.4) * 0.5 + 0.5);
+    float dots = 1.0 - smoothstep(0.14, 0.24, length(fract(q * 0.9 + vec2(hash(floor(q * 0.9)) * 0.3)) - 0.5));
+    col = mix(col, uReef, reef * (0.38 + 0.35 * waves));
+    col = mix(col, uRock, rock * (0.30 + 0.45 * dots));
     return col;
   }
   vec3 simColor(float d, float sh){
@@ -338,7 +410,7 @@ const chartFS = /* glsl */`
     vec3 rock = vec3(0.42, 0.40, 0.36) * (0.7 + 0.55 * fbm(p * 0.9));
     vec3 reef = mix(vec3(0.44, 0.39, 0.30), vec3(0.58, 0.38, 0.50), smoothstep(0.45, 0.7, fbm(p * 0.7 + 3.0)));
     reef = mix(reef, vec3(0.40, 0.48, 0.35), smoothstep(0.55, 0.8, fbm(p * 1.1 + 9.0)));
-    vec4 w = clamp(vMix * 1.7 * (0.55 + 0.9 * vec4(fbm(p * 0.6 + 1.0), fbm(p * 0.6 + 5.0), fbm(p * 0.6 + 9.0), fbm(p * 0.6 + 13.0))), 0.0, 1.0);
+    vec4 w = clamp(vMix * uCover * 1.7 * (0.55 + 0.9 * vec4(fbm(p * 0.6 + 1.0), fbm(p * 0.6 + 5.0), fbm(p * 0.6 + 9.0), fbm(p * 0.6 + 13.0))), 0.0, 1.0);
     float ws = w.x + w.y + w.z + w.w;
     if (ws > 1.0) { w /= ws; ws = 1.0; }
     vec3 col = sand * (1.0 - ws) + gravel * w.x + rubble * w.y + rock * w.z + reef * w.w;
@@ -493,6 +565,7 @@ POINTS.forEach((p) => {
   scene.add(buildPier(kit, { head, bearing: PIER.bearing, headSize: PIER.headSize, walkWidth: PIER.walkWidth, seaDist, yAt, W }));
 }
 scene.add(buildBuildings(kit, NEAR_BUILDINGS, { ext, seaDist, yAt }));
+scene.add(buildPipes(kit, { head: PIER_HEAD, bearing: PIER.bearing, offsets: PIPES.offsets, diameter: PIPES.diameter, color: PIPES.color, seaDist, yAt, W, ext }));
 
 /* ── simulation extras: scattered rocks and coral heads, and the water surface ── */
 let scatter = null;
@@ -1026,6 +1099,7 @@ function applyTheme() {
     m.uniforms.uT1.value.copy(T.t1); m.uniforms.uT2.value.copy(T.t2); m.uniforms.uT3.value.copy(T.t3); m.uniforms.uT4.value.copy(T.t4);
     m.uniforms.uInk.value.copy(T.ink); m.uniforms.uSlice.value.copy(T.slice); m.uniforms.uDark.value = T.dark ? 1 : 0;
     m.uniforms.uLand.value.copy(T.buff);
+    m.uniforms.uReef.value.copy(T.reef); m.uniforms.uRock.value.copy(T.rock);
   });
   kit.setMode(kit.mode, T.clay);
   waterMat.uniforms.uDark.value = T.dark ? 1 : 0;
@@ -1056,17 +1130,62 @@ function setSim(on) {
   [bedMat, wallMat].forEach((m) => (m.uniforms.uSim.value = on ? 1 : 0));
   kit.setMode(on ? 'sim' : 'chart', T.clay);
   if (on && !scatter) {
-    scatter = buildScatter(kit, { ext, inSea, typeAt: mixAt, yAt, W });
+    scatter = buildScatter(kit, { ext, inSea, typeAt: mixAt, yAt, W, tries: 90000 });
     scene.add(scatter);
   }
-  if (scatter) scatter.visible = on;
+  updateCoverObjects();
   water.visible = on;
   scene.fog = on ? new THREE.FogExp2(T.dark ? '#0b2a3a' : '#2a7090', 0.0016) : null;
   simBtn.setAttribute('aria-checked', String(on));
   try { localStorage.setItem('iui-sim', on ? '1' : '0'); } catch {}
 }
 simBtn.addEventListener('click', () => setSim(!sim));
+
+/* ═════════════ seabed cover switch + Smithsonian corals ═════════════ */
+const coverBtn = $('#coverToggle');
+let cover = true, corals = null;
+const coverStatus = $('#coverStatus');
+function ensureCorals() {
+  if (corals) return;
+  const places = [];
+  const r = (() => { let a = 1234567; return () => ((a = (a * 1103515245 + 12345) % 2147483648) / 2147483648); })();
+  const TINTS = ['#c9a27a', '#b07a9a', '#9fb27a', '#c48b5a', '#8f7fb0', '#d0b48a', '#a5c0a0', '#b89070'];
+  for (let k = 0; k < 40000 && places.length < 240; k++) {
+    const e = ext.e0 + r() * ext.w, n = ext.n0 + r() * ext.h;
+    if (!inSea(e, n)) continue;
+    const m = mixAt(e, n);
+    if (m.reef < 0.5 || r() > m.reef) continue;
+    places.push({ x: e, y: yAt(e, n), z: -n, size: 0.6 + r() * 1.1, rot: r() * Math.PI * 2, tint: TINTS[Math.floor(r() * TINTS.length)] });
+  }
+  coverStatus.hidden = false;
+  coverStatus.textContent = t('coralsLoading', 0, CORAL_MODELS.length);
+  corals = coralReef(CORAL_MODELS, places, {
+    onStatus: ({ done, failed, total }) => {
+      if (done < total) coverStatus.textContent = t('coralsLoading', done, total);
+      else coverStatus.textContent = failed === total ? t('coralsFailed') : t('coralsDone');
+    },
+  });
+  scene.add(corals);
+}
+function updateCoverObjects() {
+  const show = sim && cover;
+  if (scatter) scatter.visible = show;
+  if (show) ensureCorals();
+  if (corals) corals.visible = show;
+  if (!show && coverStatus.textContent === t('coralsDone')) coverStatus.hidden = true;
+  else if (show && corals) coverStatus.hidden = false;
+}
+function setCover(on) {
+  cover = on;
+  [bedMat, wallMat].forEach((m) => (m.uniforms.uCover.value = on ? 1 : 0));
+  coverBtn.setAttribute('aria-checked', String(on));
+  $('.depths').classList.toggle('cover-on', on);
+  updateCoverObjects();
+  try { localStorage.setItem('iui-cover', on ? '1' : '0'); } catch {}
+}
+coverBtn.addEventListener('click', () => setCover(!cover));
 try { if (localStorage.getItem('iui-sim') === '1') setSim(true); } catch {}
+try { setCover(localStorage.getItem('iui-cover') !== '0'); } catch { setCover(true); }
 
 /* ═════════════ compass & scale ═════════════ */
 const rose = $('#compassRose');
@@ -1418,4 +1537,4 @@ const hashId = decodeURIComponent(location.hash.slice(1));
 if (byId[hashId]) setTimeout(() => select(hashId), 400);
 
 // small debugging handle
-window.__iui = { POINTS, select, resetView, camera, controls, fit, seabed, scene, yAt };
+window.__iui = { POINTS, select, resetView, camera, controls, seabed, scene, yAt, mixAt };

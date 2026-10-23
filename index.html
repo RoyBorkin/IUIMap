@@ -87,12 +87,19 @@
     <section class="depths" aria-label="חתכי עומק" data-i18n-aria="depthsGroup">
       <p class="depths-title" data-i18n="depths">חתכי עומק</p>
       <div class="depth-chips" id="depthChips"></div>
+      <button type="button" class="chip chip-cover" id="coverToggle" role="switch" aria-checked="true" data-i18n-aria="coverAria" aria-label="כיסוי קרקע: שונית, אבנים וחול"><span data-i18n="cover">כיסוי קרקע</span></button>
       <ol class="legend" aria-label="גווני עומק" data-i18n-aria="legendGroup">
         <li><i style="background:var(--t1)"></i>0–3</li>
         <li><i style="background:var(--t2)"></i>3–6</li>
         <li><i style="background:var(--t3)"></i>6–9</li>
         <li><i style="background:var(--t4)"></i><span data-i18n="legendDeep">9+ מ׳</span></li>
       </ol>
+      <ol class="legend legend-cover" aria-label="כיסוי קרקע" data-i18n-aria="cover">
+        <li><i style="background:var(--reef)"></i><span data-i18n="legendReef">שונית</span></li>
+        <li><i style="background:var(--rock)"></i><span data-i18n="legendRock">אבנים</span></li>
+        <li><i class="sand"></i><span data-i18n="legendSand">חול</span></li>
+      </ol>
+      <p class="cover-status" id="coverStatus" aria-live="polite" hidden></p>
     </section>
 
     <div class="nav-widgets">

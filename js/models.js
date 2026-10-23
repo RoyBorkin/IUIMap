@@ -449,6 +449,36 @@ export function buildPier(kit, { head, bearing, headSize, walkWidth, seaDist, yA
   return b.build();
 }
 
+/* ═════════════ pipes along the pier ═════════════
+   two pipes side by side on the seabed, along the south side of the pier,
+   from the beach down the slope to the deep water */
+export function buildPipes(kit, { head, bearing, offsets, diameter, color, seaDist, yAt, W, ext }) {
+  const g = new THREE.Group();
+  const br = (bearing * Math.PI) / 180;
+  const ue = Math.sin(br), un = Math.cos(br); // towards the beach
+  const ve = un, vn = -ue; // +v is north-east, so the south side is negative v
+  const r = diameter / 2;
+  const inBlock = (q) => q.e > ext.e0 + 1 && q.e < ext.e1 - 1 && q.n > ext.n0 + 1 && q.n < ext.n1 - 1;
+  offsets.forEach((off) => {
+    const at = (u) => ({ e: head.e + u * ue - off * ve, n: head.n + u * un - off * vn });
+    // start a few metres up the beach, end where the block ends
+    let u0 = 0;
+    while (u0 < 200 && seaDist(at(u0).e, at(u0).n) > -3) u0 += 0.5;
+    const pts = [];
+    for (let u = u0; u > -400; u -= 0.75) {
+      const q = at(u);
+      if (!inBlock(q)) break;
+      const onBeach = seaDist(q.e, q.n) < 0;
+      pts.push(W(q.e, q.n, yAt(q.e, q.n) + (onBeach ? -r * 0.6 : r)));
+    }
+    if (pts.length < 4) return;
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const geo = new THREE.TubeGeometry(curve, pts.length * 2, r, 12, false);
+    g.add(new THREE.Mesh(geo, kit.mat(color)));
+  });
+  return g;
+}
+
 /* ═════════════ buildings on the beach ═════════════
    footprints traced from the satellite image, extruded to an estimated height */
 export function buildBuildings(kit, list, { ext, seaDist, yAt }) {
@@ -474,11 +504,11 @@ export function buildBuildings(kit, list, { ext, seaDist, yAt }) {
 }
 
 /* ═════════════ scattered seabed: rocks, gravel, rubble, coral heads (simulation only) ═════════════ */
-export function buildScatter(kit, { ext, inSea, typeAt, yAt, W }) {
+export function buildScatter(kit, { ext, inSea, typeAt, yAt, W, tries: triesWanted }) {
   const b = new Builder(kit);
   const r = rng(4242);
   const rocks = [], heads = [], pebbles = [];
-  const tries = 26000;
+  const tries = triesWanted || 26000;
   for (let i = 0; i < tries; i++) {
     const e = ext.e0 + r() * ext.w, n = ext.n0 + r() * ext.h;
     if (!inSea(e, n)) continue;
