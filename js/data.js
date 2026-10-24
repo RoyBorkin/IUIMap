@@ -120,11 +120,11 @@ export const POINTS = [
   },
   {
     id: 'shahar', name: 'השולחן של שחר',
-    en: {name: "Shahar's table", terrain: "Rubble"},
+    en: {name: "Shahar's table", terrain: "Rubble", material: "Metal frame with orange plates"},
     derive: { from: 'flowering', bearing: 130, dist: 13 },
     depth: [8, 10], dims: [6, 1, 1.5], shape: 'box',
-    terrain: 'דרדרת', material: '',
-    photos: [], model: 'table',
+    terrain: 'דרדרת', material: 'מסגרת מתכת עם לוחות כתומים',
+    photos: photoSet('shahar', 4), model: 'shahar',
   },
   {
     id: 'cylinder', name: 'גליל ליד המזח',
@@ -474,3 +474,84 @@ export const CORAL_MODELS = [
   { name: 'Porites lobata', size: 0.9, share: 0.3, bright: 1.45, near: 4000, far: 600, url: 'https://3d-api.si.edu/content/document/3d_package:010228bb-75de-4fff-a848-c70584ce1087/resources/usnm_646-100k-2048_std_draco.glb' },
   { name: 'Goniastrea favulus', size: 0.9, share: 0.25, bright: 1.2, near: 4000, far: 600, url: 'https://3d-api.si.edu/content/document/3d_package:009463d3-6f58-4f5b-8e60-915805a876ee/resources/usnm_91201-100k-2048_std_draco.glb' },
 ];
+
+// ─────────────────────────────────────────────────────────────
+//  The team: each member describes their part in the mission.
+//  type 'person': name, role, paragraphs, and optional titled sections.
+// ─────────────────────────────────────────────────────────────
+DECKS.he.team = {
+  title: 'הצוות',
+  slides: [
+    {
+      type: 'person', name: 'עמית', role: 'צוות הצלילה, צלילת מיכלים',
+      paragraphs: ['השבוע השתתפתי במיפוי קרקעית הים מול המכון הבין־אוניברסיטאי. בצוות הצלילה, יחד עם קורל, מדדנו ותיעדנו שמונה נקודות ייחוס: עומק, מידות העצמים, כיווני המצפן, המרחקים בין הנקודות וסוג המצע. הנתונים נרשמו בטבלה ונבדקו מול המדידות של הצוות המקביל. בהמשך צוות השנורקלים השלים נקודות חסרות והשתמש ביחסים הגיאומטריים שנמדדו כדי לייעל את איסוף הנתונים ולהשלים ממדים חסרים.'],
+      sections: [
+        ['תכנון המשימה', 'השתתפתי בתכנון ביצוע המשימה ובחלוקת תחומי האחריות בקבוצה, ותדרכתי את חברי הקבוצה על השימוש ב־GPS.'],
+        ['איסוף נתונים', 'בצוות הצוללים ניווטתי לנקודות הציון ואספתי נתונים במהלך צלילת סקובה: תיעוד בסלייט, מדידת אורך, רוחב וגובה באמצעות רולטקה, מדידת עומק בעזרת מחשב צלילה, תיאור התכסית ומדידת אזימוטים בין נקודות הציון באמצעות מצפן.'],
+        ['עיבוד והצגת הנתונים', 'השתתפתי באפיון האתר ובניסוח התוכן להצגת העבודה. בנוסף, הזנתי וסידרתי את נתוני ה־GPS שנאספו בשטח והצגתי את העבודה בפני הכיתה.'],
+      ],
+    },
+    {
+      type: 'person', name: 'שירה', role: 'צוות השנורקל, שנורקל וצלילה חופשית',
+      paragraphs: [
+        'יחד עם רועי הייתי בצוות השנרקול. שחינו יחד מעל צוות הצוללים (קורל ועמית), וכאשר הגענו לכל אובייקט, צילמתי אותו מלמעלה, כפי שרואים אותו במהלך שנרקול. לאחר מכן צללתי בצלילה חופשית וצילמתי אותו מהצד, כפי שרואים אותו במהלך צלילה.',
+        'לאחר מכן שחיתי אל האובייקט הבא, כך שרועי יוכל לכוון אליי את המצפן ולמצוא את האזימוט של הנקודה הבאה, וכן הלאה.',
+        'בנוסף, רועי ואני המשכנו יחד לשלושה אובייקטים נוספים שהיו דרומית למזח, ושם מדדנו את האורך, הרוחב והגובה של כל אובייקט, וכן את העומק שבו הוא נמצא. עשינו זאת באמצעות צלילות חופשיות ושימוש ברולטקה שלקצה שלה חיברנו משקולת.',
+      ],
+    },
+    {
+      type: 'person', name: 'קורל', role: 'ראש צוות הצלילה, צלילת מיכלים',
+      paragraphs: [
+        'במסגרת המשימה השתתפתי יחד עם שאר חברי הקבוצה בתכנון המיפוי, משלב קביעת שיטות המדידה וחלוקת התפקידים ועד לביצוע בשטח.',
+        'במהלך הצלילה שימשתי כראש צוות צוללי המיכלים, שכלל את עמית ואותי, ועבדנו יחד לאורך כל המדידות. אני הפעלתי את הרולטקה, ובשיתוף פעולה מדדנו את האורך, הרוחב והגובה של האובייקטים ואת המרחקים ביניהם. במקומות שבהם לא ניתן היה לבצע מדידה ישירה, הערכנו מרחקים באמצעות ספירת מכות סנפיר.',
+        'עמית היה אחראי על רישום הנתונים בסלייט תוך כדי המדידות המשותפות, ובנוסף מדדנו עומקים ואזימוטים ותיעדנו את תוואי הקרקעית לאורך המסלול. רועי היה היוצר של המצגת והשאר ייעצו בכלליות.',
+      ],
+    },
+    {
+      type: 'person', name: 'רועי', role: 'צוות השנורקל, שנורקל וצלילה חופשית',
+      paragraphs: [
+        'במשימת המיפוי הייתי חלק מצוות השנורקל, יחד עם שירה. שנרקלנו מעל צוות הצלילה לאורך כל הצלילה, וירדתי לצלילות חופשיות כשהיה צריך להשלים מדידות של עומק וגובה. אחרי שצוות המיכלים סיים את הנקודות שמצפון למזח, המשכנו לבד לנקודות שמדרום לו.',
+        'בנקודות האחרונות הסקתי את ממדי העצמים: בחנתי את הצורה שלהם מפני המים, מדדתי ממד אחד והערכתי את השאר לפי הפרופורציות, למשל יחס של 2:3 בין הצלעות בעצמים מלבניים. עזרתי גם לתכנן את המשימה, כולל חלוקת התפקידים ושיטת המדידה.',
+        'בנוסף בניתי את האפליקציה שמציגה את תוצאות המיפוי: מפה תלת־ממדית אינטראקטיבית של הקרקעית, עם כל הנקודות, המסלול, חתכי העומק, התמונות מהצלילה ומפת לוויין לניווט.',
+      ],
+    },
+  ],
+};
+DECKS.en.team = {
+  title: 'The team',
+  slides: [
+    {
+      type: 'person', name: 'Amit', role: 'Dive team, scuba',
+      paragraphs: ['This week I took part in mapping the seabed off the Interuniversity Institute. On the dive team, together with Coral, we measured and recorded eight reference points: depth, object size, compass bearings, the distances between points and the type of bottom. The data went into a table and was checked against the other team’s measurements. Later the snorkel team filled in missing points and used the geometric ratios we had measured to speed up data collection and complete missing dimensions.'],
+      sections: [
+        ['Mission planning', 'I took part in planning how the mission would be carried out and in dividing responsibilities in the group, and briefed the team on using the GPS.'],
+        ['Data collection', 'On the dive team I navigated to the waypoints and collected data during the scuba dive: recording on the slate, measuring length, width and height with a measuring tape, measuring depth with a dive computer, describing the bottom cover and taking compass bearings between waypoints.'],
+        ['Processing and presenting the data', 'I helped define the website and write the content presenting the work. I also entered and organised the GPS data collected in the field, and presented the work to the class.'],
+      ],
+    },
+    {
+      type: 'person', name: 'Shira', role: 'Snorkel team, snorkelling and freediving',
+      paragraphs: [
+        'Roy and I were the snorkel team. We swam together above the divers (Coral and Amit), and at each object I photographed it from above, the way you see it while snorkelling. Then I freedived down and photographed it from the side, the way you see it while diving.',
+        'Then I swam to the next object, so Roy could aim the compass at me and find the bearing to the next point, and so on.',
+        'Roy and I also went on to three more objects south of the pier, where we measured the length, width and height of each one and the depth it sits at. We did this by freediving, with a measuring tape that had a weight tied to its end.',
+      ],
+    },
+    {
+      type: 'person', name: 'Coral', role: 'Dive team lead, scuba',
+      paragraphs: [
+        'Together with the rest of the group I took part in planning the survey, from choosing the measuring methods and dividing the roles to the work in the field.',
+        'During the dive I led the scuba team, which was Amit and me, and we worked together through all the measurements. I handled the measuring tape, and together we measured the length, width and height of the objects and the distances between them. Where we couldn’t measure directly, we estimated distances by counting fin kicks.',
+        'Amit recorded the data on the slate while we measured together, and we also measured depths and bearings and described the seabed along the route. Roy created the presentation and the rest of us gave general input.',
+      ],
+    },
+    {
+      type: 'person', name: 'Roy', role: 'Snorkel team, snorkelling and freediving',
+      paragraphs: [
+        'In the mapping mission I was on the snorkel team with Shira. We snorkelled above the dive team for the whole dive, and I freedived down whenever depth or height measurements needed completing. Once the scuba team finished the points north of the pier, we carried on alone to the points south of it.',
+        'At the last points I worked out the objects’ dimensions: I studied their shape from the surface, measured one dimension and estimated the rest from the proportions, for example a 2:3 ratio between the sides of rectangular objects. I also helped plan the mission, including the roles and the measuring method.',
+        'I also built the app that presents the results: an interactive 3D map of the seabed with all the points, the route, the depth slices, the photos from the dive and a satellite map for navigation.',
+      ],
+    },
+  ],
+};

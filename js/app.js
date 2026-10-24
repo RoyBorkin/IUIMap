@@ -1456,6 +1456,11 @@ function fig(s, wide) {
 }
 function slideHTML(s) {
   let body = '';
+  if (s.type === 'person') {
+    const text = `<div class="person-text">${s.paragraphs.map((t) => `<p>${esc(t)}</p>`).join('')}</div>` +
+      (s.sections ? `<dl class="person-sections">${s.sections.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>` : '');
+    return `<article class="slide"><header class="person-head"><h2 id="deckSlideTitle">${esc(s.name)}</h2><p class="person-role">${esc(s.role)}</p></header>${text}</article>`;
+  }
   if (s.type === 'text') {
     const text =
       (s.lead ? `<p class="lead">${esc(s.lead)}</p>` : '') +
@@ -1625,6 +1630,9 @@ resize();
   controls.update();
 }
 new ResizeObserver(() => resize()).observe(canvas);
+// the info panel starts below the toolbar, however many rows the toolbar wraps to
+const toolbarEl = document.querySelector('.toolbar');
+new ResizeObserver(() => document.documentElement.style.setProperty('--toolbar-h', `${toolbarEl.offsetHeight}px`)).observe(toolbarEl);
 window.addEventListener('resize', resize);
 measureLabels();
 document.fonts?.ready.then(measureLabels);

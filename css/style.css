@@ -142,7 +142,7 @@ svg { display: block; }
 }
 .tb {
   display: inline-flex; align-items: center; gap: 7px;
-  height: 40px; padding: 0 13px;
+  height: 40px; padding: 0 11px;
   border: 1px solid var(--ink); border-radius: 3px;
   background: var(--glass);
   font-size: var(--s0); font-weight: 500;
@@ -265,7 +265,7 @@ svg { display: block; }
 /* ───────── info panel ───────── */
 .panel {
   position: absolute; z-index: 5;
-  top: calc(var(--gut) + 52px); bottom: var(--gut); inset-inline-end: var(--gut);
+  top: calc(var(--gut) + var(--toolbar-h, 40px) + 12px); bottom: var(--gut); inset-inline-end: var(--gut);
   width: var(--panel-w);
   background: var(--paper);
   border: 1px solid var(--ink);
@@ -473,7 +473,7 @@ dialog { color: var(--ink); }
 
   .toolbar {
     top: auto; bottom: 0; inset-inline: 0; max-width: none;
-    display: grid; grid-template-columns: repeat(6, 1fr); gap: 0;
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 0;
     padding: 6px 6px max(6px, env(safe-area-inset-bottom));
     background: var(--paper);
     border-top: 1px solid var(--ink);
@@ -578,3 +578,26 @@ dialog { color: var(--ink); }
 @keyframes loader-slide-rtl { from { transform: translateX(110%); } to { transform: translateX(-300%); } }
 .loader-step { margin: 12px 0 0; font-size: var(--s0); color: var(--ink-2); min-height: 1.5em; }
 @media (prefers-reduced-motion: reduce) { .loader-bar.is-busy span { animation: none; width: 100%; opacity: .5; } }
+
+/* team slides */
+.person-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 18px; }
+.person-head h2 { margin: 0; }
+.person-role { margin: 0; font-size: var(--s1); color: var(--ink-2); }
+.person-text { max-width: 40em; }
+.person-text p { margin: 0 0 14px; font-family: var(--serif); font-size: clamp(1.05rem, 1.7vw, 1.25rem); line-height: 1.65; }
+.person-sections { margin: 22px 0 0; display: grid; grid-template-columns: max-content 1fr; max-width: 46em; border-top: 1px solid var(--rule); }
+.person-sections dt, .person-sections dd { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.person-sections dt { padding-inline-end: 24px; font-family: var(--serif); font-size: var(--s1); font-weight: 700; }
+.person-sections dd { font-size: var(--s0); line-height: 1.6; }
+@media (max-width: 760px) {
+  .person-sections { grid-template-columns: 1fr; }
+  .person-sections dt { padding-bottom: 0; border-bottom: 0; }
+  .person-sections dd { padding-top: 4px; }
+  .tb { font-size: 10px; }
+}
+
+/* the QR button is icon-only on wide screens, so the toolbar fits on one row */
+@media (min-width: 761px) {
+  .tb-qr > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .toolbar { max-width: calc(100vw - 400px); }
+}

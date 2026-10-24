@@ -320,6 +320,34 @@ function genericTable(kit, [w, l, h]) {
   steelTable(b, { w, l, h, grid: [Math.max(2, Math.round(w / 0.4)), Math.max(2, Math.round(l / 0.4))] });
   return b.build();
 }
+// השולחן של שחר: long aluminium frame table with two rows of orange plates held by white cable ties
+function shaharTable(kit, [w, l, h], r) {
+  const b = new Builder(kit);
+  const ALU = '#A9B0B6', PLATE = '#D9782E', TIE = '#EDEDE6';
+  const hx = w / 2, hz = l / 2, top = h, t = 0.03;
+  // legs every ~1.5 m on both long sides, with cross braces
+  const n = Math.max(2, Math.round(w / 1.5));
+  for (let i = 0; i <= n; i++) {
+    const x = -hx + (w * i) / n;
+    [-hz, hz].forEach((z) => b.rod(V(x, -0.35, z), V(x, top, z), 0.035, ALU));
+    b.rod(V(x, top * 0.35, -hz), V(x, top * 0.35, hz), 0.02, ALU);
+    if (i < n) [-hz, hz].forEach((z) => b.rod(V(x, top * 0.15, z), V(-hx + (w * (i + 1)) / n, top * 0.85, z), 0.015, ALU));
+  }
+  // top frame: two long rails, cross members, and a middle rail
+  [-hz, 0, hz].forEach((z) => b.rod(V(-hx, top, z), V(hx, top, z), z ? 0.04 : 0.025, ALU));
+  const cells = Math.max(4, Math.round(w / 0.5));
+  for (let i = 0; i <= cells; i++) { const x = -hx + (w * i) / cells; b.rod(V(x, top, -hz), V(x, top, hz), t, ALU); }
+  // orange plates in two rows, with cable ties sticking up at the corners
+  const pw = (w / cells) * 0.82, pl = hz * 0.82;
+  for (let i = 0; i < cells; i++) {
+    const x = -hx + (w * (i + 0.5)) / cells;
+    [-hz / 2, hz / 2].forEach((z) => {
+      b.box(pw, 0.025, pl, PLATE, [x, top + 0.02, z], [0, (r() - 0.5) * 0.06, 0]);
+      [[-1, -1], [1, 1]].forEach(([sx, sz]) => b.rod(V(x + sx * pw * 0.48, top + 0.03, z + sz * pl * 0.48), V(x + sx * pw * 0.5, top + 0.12, z + sz * pl * 0.5), 0.006, TIE));
+    });
+  }
+  return b.build();
+}
 function concreteCube(kit, [w, l, h]) {
   const b = new Builder(kit);
   b.box(w, h, l, CONCRETE, [0, h / 2 - 0.05, 0]);
@@ -343,6 +371,7 @@ export function buildObject(kit, p) {
     case 'habitat': return habitat(kit, r);
     case 'pyramid': return pyramid(kit, r);
     case 'table': return genericTable(kit, p.dims);
+    case 'shahar': return shaharTable(kit, p.dims, r);
     case 'cube': return concreteCube(kit, p.dims);
     case 'cylinder': return lyingCylinder(kit, p.dims);
     default: return null;
