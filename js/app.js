@@ -33,6 +33,45 @@ const t = (k, ...a) => { const v = UI[LANG][k]; return typeof v === 'function' ?
 const tx = (p, f) => (LANG === 'en' && p.en && p.en[f] != null ? p.en[f] : p[f]);
 const nm = (p) => tx(p, 'name');
 const isRTL = () => LANG === 'he';
+
+/* ═════════════ loading screen ═════════════
+   Shown while the scene is built, and again (softly, over the map) while the
+   3D corals download. It hides once nothing is left to wait for. */
+const loading = { scene: true, corals: false, booted: false };
+const loaderEl = document.getElementById('loader');
+const loaderBarWrap = loaderEl.querySelector('.loader-bar');
+function loaderStep(text, frac = null) {
+  document.getElementById('loaderStep').textContent = text;
+  loaderBarWrap.classList.toggle('is-busy', frac === null);
+  document.getElementById('loaderBar').style.width = frac === null ? '' : `${Math.round(frac * 100)}%`;
+}
+function loaderShow(soft) {
+  loaderEl.classList.toggle('is-soft', !!soft);
+  loaderEl.classList.remove('is-done');
+}
+function loaderBrand() {
+  const img = document.getElementById('loaderLogo');
+  const dark = document.documentElement.dataset.theme === 'dark';
+  img.src = `assets/logo/iui-${LANG}${dark ? '-light' : ''}.png`;
+  img.alt = LANG === 'en' ? 'The Interuniversity Institute for Marine Sciences in Eilat' : 'המכון הבין־אוניברסיטאי למדעי הים באילת';
+  img.height = LANG === 'en' ? 256 : 315;
+  document.getElementById('loaderTitle').textContent = t('title');
+}
+let onLoaderHidden = null;
+const LOADER_MIN_MS = 1200; // the opening screen stays at least this long, so the logo doesn't just flash
+function loaderMaybeHide() {
+  if (loading.scene || loading.corals) return;
+  if (!loaderEl.classList.contains('is-soft') && performance.now() < LOADER_MIN_MS) {
+    setTimeout(loaderMaybeHide, LOADER_MIN_MS - performance.now() + 20);
+    return;
+  }
+  if (!loaderEl.classList.contains('is-done')) {
+    loaderEl.classList.add('is-done');
+    if (onLoaderHidden) { onLoaderHidden(); onLoaderHidden = null; }
+  }
+}
+// never leave people stuck behind the loading screen
+setTimeout(() => { loading.scene = false; loading.corals = false; loaderMaybeHide(); }, 25000);
 // keep numeric ranges like 7–10 in reading order inside right-to-left text
 const num = (v) => `\u2066${v}\u2069`;
 
@@ -1112,6 +1151,7 @@ function applyTheme() {
   selRing.material.color.copy(T.magenta);
   lineMats.forEach((m) => m.color.copy(m.userData.role === 'main' ? T.magenta : T.ink2));
   syncThemeButton();
+  loaderBrand();
 
 }
 themeBtn.addEventListener('click', () => {
@@ -1130,7 +1170,8 @@ function setSim(on) {
   [bedMat, wallMat].forEach((m) => (m.uniforms.uSim.value = on ? 1 : 0));
   kit.setMode(on ? 'sim' : 'chart', T.clay);
   if (on && !scatter) {
-    scatter = buildScatter(kit, { ext, inSea, typeAt: mixAt, yAt, W, tries: 90000 });
+    // the 3D corals fill the reef, so no simple coral heads or loose rocks there
+    scatter = buildScatter(kit, { ext, inSea, typeAt: (e, n) => { const m = mixAt(e, n); const k = 1 - m.reef; return { ...m, reef: 0, rocks: m.rocks * k, rubble: m.rubble * k }; }, yAt, W, tries: 90000 });
     scene.add(scatter);
   }
   updateCoverObjects();
@@ -1149,10 +1190,14 @@ function ensureCorals() {
   if (corals) return;
   const places = [];
   const r = (() => { let a = 1234567; return () => ((a = (a * 1103515245 + 12345) % 2147483648) / 2147483648); })();
-  const TINTS = ['#c9a27a', '#b07a9a', '#9fb27a', '#c48b5a', '#8f7fb0', '#d0b48a', '#a5c0a0', '#b89070', '#a88a6a', '#9a7fa0'];
+  // light tints over the real texture, so colonies vary a little without hiding their detail
+  const TINTS = ['#ffffff', '#f6e7d6', '#f1dce8', '#e4efdc', '#f7e3c6', '#e8e0f2', '#fbefe2'];
+  const shares = CORAL_MODELS.map((c) => c.share || 1 / CORAL_MODELS.length);
+  const shareSum = shares.reduce((a, b) => a + b, 0);
+  const pickKind = () => { let x = r() * shareSum; for (let k = 0; k < shares.length; k++) if ((x -= shares[k]) <= 0) return k; return 0; };
   // sample only inside the reef areas; the further from the reef edge, the denser the corals
   const reefs = COVER_POLYS.filter((c) => c.type === 'reef');
-  const target = isPhone() ? 2000 : 4800;
+  const target = isPhone() ? 2600 : 6500;
   // pick each reef area in proportion to its size, so the big reefs get their share
   const boxes = reefs.map((c) => {
     const es = c.pts.map((q) => q.e), ns = c.pts.map((q) => q.n);
@@ -1177,16 +1222,21 @@ function ensureCorals() {
     for (let c = 0; c < clump; c++) {
       const a = r() * Math.PI * 2, d = c ? 0.5 + r() * 1.4 : 0;
       const ce = e + Math.cos(a) * d, cn = n + Math.sin(a) * d;
-      places.push({ x: ce, y: yAt(ce, cn), z: -cn, size: 0.35 + r() * (0.5 + core * 0.8), rot: r() * Math.PI * 2, tint: TINTS[Math.floor(r() * TINTS.length)] });
+      places.push({ x: ce, y: yAt(ce, cn), z: -cn, kind: pickKind(), size: 0.5 + r() * (0.4 + core * 0.7), squash: 0.85 + r() * 0.3, rot: r() * Math.PI * 2, tint: TINTS[Math.floor(r() * TINTS.length)] });
     }
   }
   coverStatus.hidden = false;
   coverStatus.textContent = t('coralsLoading', 0, CORAL_MODELS.length);
+  loading.corals = true;
+  if (loading.booted) loaderShow(true);
+  loaderStep(t('loadCorals', 0, CORAL_MODELS.length), 0.05);
   corals = coralReef(CORAL_MODELS, places, {
-    cells: isPhone() ? 13 : 16, // lighter models, so the reef can be filled densely
+    quality: isPhone() ? 0.6 : 1,
     onStatus: ({ done, failed, total }) => {
       if (done < total) coverStatus.textContent = t('coralsLoading', done, total);
       else coverStatus.textContent = failed === total ? t('coralsFailed') : t('coralsDone');
+      loaderStep(t('loadCorals', done, total), Math.max(0.05, done / total));
+      if (done >= total) { loading.corals = false; setTimeout(loaderMaybeHide, 250); }
     },
   });
   scene.add(corals);
@@ -1279,7 +1329,8 @@ function layoutLabels() {
 }
 
 /* ═════════════ loop ═════════════ */
-const introStart = performance.now() + 250;
+let introStart = performance.now() + 250;
+onLoaderHidden = () => { introStart = performance.now() + 150; };
 function frame(now) {
   // a dialog covers the map: skip drawing until it closes
   if (deck.open || lb.open || qrDlg.open) { requestAnimationFrame(frame); return; }
@@ -1296,6 +1347,7 @@ function frame(now) {
     m.grp.rotation.y = az;
     if (m.p === selected) selRing.scale.setScalar(clamp(d / 105, 0.35, 2.4));
   });
+  if (corals && corals.visible) corals.userData.update(camera);
   if (sim) {
     const t = reduceMotion ? 0 : now / 1000;
     bedMat.uniforms.uTime.value = t;
@@ -1512,6 +1564,7 @@ function applyLang() {
   html.lang = LANG;
   html.dir = isRTL() ? 'rtl' : 'ltr';
   document.title = t('docTitle');
+  loaderBrand();
   document.querySelectorAll('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n)));
   document.querySelectorAll('[data-i18n-aria]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
   document.querySelectorAll('[data-i18n-title]').forEach((el) => (el.title = t(el.dataset.i18nTitle)));
@@ -1557,6 +1610,13 @@ measureLabels();
 document.fonts?.ready.then(measureLabels);
 if (window.innerWidth > 1180) setInset(true);
 requestAnimationFrame(frame);
+loaderStep(t('loadScene'));
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  loading.scene = false;
+  loading.booted = true;
+  if (loading.corals) loaderStep(t('loadCorals', 0, CORAL_MODELS.length), 0.05);
+  loaderMaybeHide();
+}));
 const hashId = decodeURIComponent(location.hash.slice(1));
 if (byId[hashId]) setTimeout(() => select(hashId), 400);
 

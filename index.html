@@ -36,6 +36,29 @@
   </script>
 </head>
 <body>
+  <div class="loader" id="loader" role="status" aria-live="polite">
+    <div class="loader-card">
+      <img class="loader-logo" id="loaderLogo" src="assets/logo/iui-he.png" alt="המכון הבין־אוניברסיטאי למדעי הים באילת" width="1100" height="315">
+      <p class="loader-title" id="loaderTitle">מפת הקרקעית</p>
+      <div class="loader-bar" aria-hidden="true"><span id="loaderBar"></span></div>
+      <p class="loader-step" id="loaderStep">טוען את המפה…</p>
+    </div>
+  </div>
+  <script>
+    // pick the logo and words for the loading screen before anything else draws
+    (function () {
+      var en = document.documentElement.lang === 'en';
+      var dark = document.documentElement.dataset.theme === 'dark';
+      var img = document.getElementById('loaderLogo');
+      img.src = 'assets/logo/iui-' + (en ? 'en' : 'he') + (dark ? '-light' : '') + '.png';
+      if (en) {
+        img.alt = 'The Interuniversity Institute for Marine Sciences in Eilat';
+        img.height = 256;
+        document.getElementById('loaderTitle').textContent = 'Seabed Map';
+        document.getElementById('loaderStep').textContent = 'Loading the map…';
+      }
+    })();
+  </script>
   <div class="app">
     <main class="stage" id="stage" aria-label="מפה תלת־ממדית של הקרקעית" data-i18n-aria="stageLabel">
       <canvas id="scene"></canvas>

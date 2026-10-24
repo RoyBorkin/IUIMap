@@ -1,12 +1,17 @@
 // ─────────────────────────────────────────────────────────────
 //  Coral colonies from the Smithsonian 3D Digitization program (CC0).
-//  Each specimen (~100k triangles) is loaded once, simplified in the browser
-//  by vertex clustering to a few thousand triangles, and reused as instances
-//  across the reef areas.
+//  Each specimen (~100k triangles) is loaded once and simplified in the browser
+//  with meshoptimizer (quadric simplification, keeps the shape and texture),
+//  into two levels of detail:
+//    near — a few thousand triangles, for colonies close to the camera
+//    far  — about a thousand triangles, for everything else
+//  The reef is split into tiles; each tile switches between the two levels by
+//  its distance to the camera, and tiles outside the view are skipped.
 // ─────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { MeshoptSimplifier } from '../vendor/meshopt/meshopt_simplifier.module.js';
 
 let loader = null;
 function getLoader() {
@@ -18,93 +23,98 @@ function getLoader() {
   return loader;
 }
 
-/* vertex clustering: snap vertices to a grid, keep one vertex per cell, drop collapsed triangles */
-function simplify(src, cells = 38) {
-  const g = src.index ? src : src.toNonIndexed();
-  const pos = g.attributes.position, uv = g.attributes.uv;
-  g.computeBoundingBox();
-  const bb = g.boundingBox, size = new THREE.Vector3();
-  bb.getSize(size);
-  const cell = Math.max(size.x, size.y, size.z) / cells;
-  const keyOf = (i) => `${Math.floor((pos.getX(i) - bb.min.x) / cell)},${Math.floor((pos.getY(i) - bb.min.y) / cell)},${Math.floor((pos.getZ(i) - bb.min.z) / cell)}`;
-  const map = new Map(), rep = [];
-  const remap = new Int32Array(pos.count);
-  for (let i = 0; i < pos.count; i++) {
-    const k = keyOf(i);
-    let id = map.get(k);
-    if (id === undefined) { id = rep.length; map.set(k, id); rep.push(i); }
-    remap[i] = id;
-  }
-  const idx = g.index ? g.index.array : null;
-  const tris = [];
-  const triCount = (idx ? idx.length : pos.count) / 3;
-  const seen = new Set();
-  for (let t = 0; t < triCount; t++) {
-    const a = remap[idx ? idx[t * 3] : t * 3], b = remap[idx ? idx[t * 3 + 1] : t * 3 + 1], c = remap[idx ? idx[t * 3 + 2] : t * 3 + 2];
-    if (a === b || b === c || a === c) continue;
-    const key = [a, b, c].sort((x, y) => x - y).join(',');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    tris.push(a, b, c);
-  }
-  const out = new THREE.BufferGeometry();
-  const p = new Float32Array(rep.length * 3), u = uv ? new Float32Array(rep.length * 2) : null;
-  rep.forEach((i, k) => {
-    p[k * 3] = pos.getX(i); p[k * 3 + 1] = pos.getY(i); p[k * 3 + 2] = pos.getZ(i);
-    if (u) { u[k * 2] = uv.getX(i); u[k * 2 + 1] = uv.getY(i); }
-  });
-  out.setAttribute('position', new THREE.BufferAttribute(p, 3));
-  if (u) out.setAttribute('uv', new THREE.BufferAttribute(u, 2));
-  out.setIndex(tris);
-  out.computeVertexNormals();
-  return out;
+function lod(geo, triangles) {
+  const idx = new Uint32Array(geo.index.array);
+  const target = Math.min(idx.length, Math.floor(triangles) * 3);
+  const pos = new Float32Array(geo.attributes.position.array);
+  const [out] = MeshoptSimplifier.simplify(idx, pos, 3, target, 0.08, ['LockBorder']);
+  const g = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'uv']) if (geo.attributes[name]) g.setAttribute(name, geo.attributes[name]);
+  g.setIndex(new THREE.BufferAttribute(out, 1));
+  if (!geo.attributes.normal) g.computeVertexNormals();
+  return g;
 }
 
-/* load one specimen and return { geometry, material, base } normalised so it sits on y = 0 and is 1 m wide */
-async function loadSpecimen(spec, cells) {
+/* load one specimen, normalised to sit on y = 0 and be 1 m wide, in two levels of detail */
+async function loadSpecimen(spec, quality) {
   const gltf = await getLoader().loadAsync(spec.url);
   let mesh = null;
   gltf.scene.traverse((o) => { if (!mesh && o.isMesh) mesh = o; });
   if (!mesh) throw new Error('no mesh');
   mesh.updateWorldMatrix(true, false);
-  const geo = simplify(mesh.geometry.clone().applyMatrix4(mesh.matrixWorld), cells);
+  let geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+  if (!geo.index) geo.setIndex([...Array(geo.attributes.position.count).keys()]);
   geo.computeBoundingBox();
   const bb = geo.boundingBox, size = new THREE.Vector3(), c = new THREE.Vector3();
   bb.getSize(size); bb.getCenter(c);
   const w = Math.max(size.x, size.z) || 1;
   geo.translate(-c.x, -bb.min.y, -c.z);
   geo.scale(1 / w, 1 / w, 1 / w);
+  await MeshoptSimplifier.ready;
+  const near = lod(geo, spec.near * quality);
+  const far = lod(geo, spec.far * quality);
   const map = mesh.material && mesh.material.map ? mesh.material.map : null;
+  if (map) { map.anisotropy = 4; }
   const material = new THREE.MeshLambertMaterial({ map, color: 0xffffff });
-  return { geometry: geo, material, name: spec.name };
+  return { near, far, material };
 }
 
 /**
  * Load the specimens and scatter them as instances.
- * places: [{ x, y, z, size, rot, tint }] in world units (y is the ground height).
- * Returns a THREE.Group, filled as each specimen arrives.
+ * places: [{ x, y, z, size, rot, tint, kind }] in world units (y is the ground height);
+ * kind is the index of the specimen to use.
+ * Returns a THREE.Group with userData.update(camera) to switch levels of detail.
  */
-export function coralReef(specs, places, { onStatus, cells = 20 } = {}) {
+export function coralReef(specs, places, { onStatus, quality = 1, tile = 14, nearDist = 40 } = {}) {
   const group = new THREE.Group();
+  const tiles = new Map();
   let done = 0, failed = 0;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color(), v = new THREE.Vector3();
+
   specs.forEach((spec, si) => {
-    const mine = places.filter((_, i) => i % specs.length === si);
-    loadSpecimen(spec, cells).then((sp) => {
-      const im = new THREE.InstancedMesh(sp.geometry, sp.material, mine.length);
-      mine.forEach((pl, i) => {
-        const s = pl.size * (spec.size / 0.8);
-        q.setFromEuler(e.set(0, pl.rot, 0));
-        m.compose(new THREE.Vector3(pl.x, pl.y - s * 0.05, pl.z), q, new THREE.Vector3(s, s * (0.8 + 0.4 * ((i * 37) % 10) / 10), s));
-        im.setMatrixAt(i, m);
-        im.setColorAt(i, col.set(pl.tint));
+    const mine = places.filter((p) => p.kind === si);
+    // group this specimen's colonies by tile
+    const byTile = new Map();
+    mine.forEach((p) => {
+      const key = `${Math.floor(p.x / tile)},${Math.floor(p.z / tile)}`;
+      if (!byTile.has(key)) byTile.set(key, []);
+      byTile.get(key).push(p);
+    });
+    loadSpecimen(spec, quality).then((sp) => {
+      byTile.forEach((list, key) => {
+        const make = (geo) => {
+          const im = new THREE.InstancedMesh(geo, sp.material, list.length);
+          list.forEach((p, i) => {
+            const s = p.size * spec.size;
+            q.setFromEuler(e.set(0, p.rot, 0));
+            m.compose(v.set(p.x, p.y - s * 0.04, p.z), q, new THREE.Vector3(s, s * p.squash, s));
+            im.setMatrixAt(i, m);
+            im.setColorAt(i, col.set(p.tint).multiplyScalar(spec.bright || 1));
+          });
+          im.instanceMatrix.needsUpdate = true;
+          im.computeBoundingSphere();
+          group.add(im);
+          return im;
+        };
+        const near = make(sp.near), far = make(sp.far);
+        near.visible = false;
+        if (!tiles.has(key)) {
+          const [tx, tz] = key.split(',').map(Number);
+          tiles.set(key, { center: new THREE.Vector3((tx + 0.5) * tile, list[0].y, (tz + 0.5) * tile), meshes: [] });
+        }
+        tiles.get(key).meshes.push({ near, far });
       });
-      im.instanceMatrix.needsUpdate = true;
-      group.add(im);
     }).catch(() => { failed++; }).finally(() => {
       done++;
       onStatus && onStatus({ done, failed, total: specs.length });
     });
   });
+
+  group.userData.update = (camera) => {
+    tiles.forEach((t) => {
+      const close = camera.position.distanceTo(t.center) < nearDist;
+      t.meshes.forEach((p) => { p.near.visible = close; p.far.visible = !close; });
+    });
+  };
   return group;
 }

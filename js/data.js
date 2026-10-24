@@ -114,7 +114,7 @@ export const POINTS = [
     id: 'deep', name: 'שולחן עומק',
     en: {name: "Deep table", terrain: "Rubble"},
     derive: { from: 'empty', bearing: 130, dist: 10 },
-    depth: [10, 12], dims: [3, 1.5, 1], shape: 'box',
+    depth: [8, 10], dims: [3, 1.5, 1], shape: 'box',
     terrain: 'דרדרת', material: '',
     photos: [], model: 'table',
   },
@@ -122,7 +122,7 @@ export const POINTS = [
     id: 'shahar', name: 'השולחן של שחר',
     en: {name: "Shahar's table", terrain: "Rubble"},
     derive: { from: 'flowering', bearing: 130, dist: 13 },
-    depth: [10, 12], dims: [6, 1, 1.5], shape: 'box',
+    depth: [8, 10], dims: [6, 1, 1.5], shape: 'box',
     terrain: 'דרדרת', material: '',
     photos: [], model: 'table',
   },
@@ -466,10 +466,11 @@ export const COVER = [
 export const PIPES = { diameter: 1, offsets: [2.1, 3.1], color: '#34383b' };
 
 // 3D coral specimens from the Smithsonian 3D Digitization program (CC0, public domain),
-// loaded at runtime when the seabed simulation is on. size = typical colony width on the reef (m).
+// loaded at runtime when the seabed simulation is on.
+// size = typical colony width on the reef (m); share = part of the reef they cover;
+// near / far = triangles kept for colonies close to / far from the camera.
 export const CORAL_MODELS = [
-  { name: 'Pocillopora damicornis', size: 0.5, url: 'https://3d-api.si.edu/content/document/3d_package:1951c814-3758-4b7f-b0ba-8f996534ff2b/resources/usnm_93379-100k-2048_std_draco.glb' },
-  { name: 'Porites lobata', size: 1.1, url: 'https://3d-api.si.edu/content/document/3d_package:010228bb-75de-4fff-a848-c70584ce1087/resources/usnm_646-100k-2048_std_draco.glb' },
-  { name: 'Millepora alcicornis', size: 0.7, url: 'https://3d-api.si.edu/content/document/3d_package:92c491e7-d31d-403d-b091-316d45dfbc2c/resources/usnm_1494038-100k-2048_std_draco.glb' },
-  { name: 'Goniastrea favulus', size: 0.8, url: 'https://3d-api.si.edu/content/document/3d_package:009463d3-6f58-4f5b-8e60-915805a876ee/resources/usnm_91201-100k-2048_std_draco.glb' },
+  { name: 'Pocillopora damicornis', size: 1.0, share: 0.45, bright: 1.1, near: 7000, far: 1200, url: 'https://3d-api.si.edu/content/document/3d_package:1951c814-3758-4b7f-b0ba-8f996534ff2b/resources/usnm_93379-100k-2048_std_draco.glb' },
+  { name: 'Porites lobata', size: 0.9, share: 0.3, bright: 1.45, near: 4000, far: 600, url: 'https://3d-api.si.edu/content/document/3d_package:010228bb-75de-4fff-a848-c70584ce1087/resources/usnm_646-100k-2048_std_draco.glb' },
+  { name: 'Goniastrea favulus', size: 0.9, share: 0.25, bright: 1.2, near: 4000, far: 600, url: 'https://3d-api.si.edu/content/document/3d_package:009463d3-6f58-4f5b-8e60-915805a876ee/resources/usnm_91201-100k-2048_std_draco.glb' },
 ];
