@@ -257,12 +257,32 @@ POINTS.forEach((p) => {
   parts.forEach((q) => { const s = seaDist(q.e, q.n); PADS.push({ ...q, d: clamp(seabedModel(q.e, q.n, s), 0, MAX_DEPTH) }); });
 });
 const smooth01 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+/* paths the team swam at one depth: the seabed along them runs evenly from end to end */
+const LEVEL_PATHS = [['nursery', 'tables3']].map(([a, b]) => {
+  const A = byId[a], B = byId[b];
+  const dA = clamp(seabedModel(A.e, A.n, seaDist(A.e, A.n)), 0, MAX_DEPTH);
+  const dB = clamp(seabedModel(B.e, B.n, seaDist(B.e, B.n)), 0, MAX_DEPTH);
+  return { A, B, dA, dB, half: 4, fade: 7 };
+});
+function levelPaths(e, n, d) {
+  for (const L of LEVEL_PATHS) {
+    const de = L.B.e - L.A.e, dn = L.B.n - L.A.n, L2 = de * de + dn * dn;
+    const t = clamp(((e - L.A.e) * de + (n - L.A.n) * dn) / L2, 0, 1);
+    const dist = Math.hypot(e - (L.A.e + de * t), n - (L.A.n + dn * t));
+    if (dist >= L.half + L.fade) continue;
+    const w = 1 - smooth01(L.half, L.half + L.fade, dist);
+    d += (L.dA + (L.dB - L.dA) * t - d) * w;
+  }
+  return d;
+}
+// the level pads under objects on such a path follow it too
+PADS.forEach((q) => (q.d = levelPaths(q.e, q.n, q.d)));
 
 // depth in metres (negative on the beach)
 function seabed(e, n) {
   const s = seaDist(e, n);
   if (s <= 0) return -1.6 * (1 - Math.exp(s / 18));
-  const d = clamp(seabedModel(e, n, s), 0, MAX_DEPTH);
+  const d = levelPaths(e, n, clamp(seabedModel(e, n, s), 0, MAX_DEPTH));
   // nearby pads are blended with each other, so close objects don't fight over the same ground
   let ws = 0, wd = 0, wmax = 0;
   for (const q of PADS) {
